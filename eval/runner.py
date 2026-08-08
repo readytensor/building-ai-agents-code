@@ -19,7 +19,8 @@ from eval.targets import Instance, SolveFn
 # Telemetry files the agent writes to its own cwd (same recording convention as
 # the episodes). The runner moves them into the instance's results folder so
 # they are preserved per attempt instead of overwritten by the next run.
-_TELEMETRY_FILES = ("tool_calls.jsonl", "metrics.json", "final_message.md", "transcript.json")
+_TELEMETRY_FILES = ("tool_calls.jsonl", "metrics.json", "final_message.md", "transcript.json",
+                    "messages.jsonl")
 
 
 def run_instance(instance: Instance, solve: SolveFn, batch_dir: Path, run_label: str) -> dict:

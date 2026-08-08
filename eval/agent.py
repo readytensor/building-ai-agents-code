@@ -34,7 +34,7 @@ load_dotenv(_REPO_ROOT / ".env")
 import skills  # noqa: E402
 import tools  # noqa: E402
 from tools import tool, write_tool_telemetry  # noqa: E402
-from compaction import compact  # noqa: E402
+from compaction import build_view, compact, _count_tokens  # noqa: E402
 from planning import write_plan, system_with_plan  # noqa: E402
 from skills import list_skills, load_skill, system_with_skills  # noqa: E402
 
@@ -64,6 +64,32 @@ ADVISOR_BASE_URL = os.environ.get("LLM_ADVISOR_BASE_URL") or BASE_URL
 # empty in testing, and so did 8000 later. Sized like the summarizer's cap:
 # generous enough that a healthy call never hits it.
 ADVISOR_MAX_TOKENS = int(os.environ.get("ADVISOR_MAX_TOKENS", 50_000))
+# What the advisor is shown, now that compaction is non-destructive and both
+# are available:
+#   "view" (default) -- exactly what the executor sees this turn, folds and
+#     all. Its advice can never lean on context the executor has lost, and the
+#     input stays bounded for free.
+#   "full" -- the complete append-only history, which is the thing keeping it
+#     buys: the advisor sees the detail a summary dropped, which is the point
+#     of a second opinion. Costs an input that grows all run, so it is trimmed
+#     to the newest ADVISOR_CONTEXT_MAX_TOKENS when it outgrows the advisor's
+#     own context window.
+ADVISOR_CONTEXT = os.environ.get("ADVISOR_CONTEXT", "view")
+ADVISOR_CONTEXT_MAX_TOKENS = int(os.environ.get("ADVISOR_CONTEXT_MAX_TOKENS", 150_000))
+
+# The canonical transcript, appended to as the run goes -- so a sample that dies
+# mid-solve (disk exhaustion, an OOM'd worker, a killed batch) still leaves its
+# transcript behind. transcript.json is the same content written at the end.
+# Two entry kinds: "message" for everything that happened, "compaction" for each
+# fold. Replay the messages for what happened, apply the folds for what the
+# model saw.
+MESSAGE_LOG = Path("messages.jsonl")
+
+
+def log_entry(entry: dict) -> None:
+    """Append one entry to MESSAGE_LOG, flushed by closing the file."""
+    with open(MESSAGE_LOG, "a", encoding="utf-8") as f:
+        f.write(json.dumps(entry) + "\n")
 
 # The system prompt lives in eval/system_prompt.md, byte-identical to Ep 5's
 # (the episode this agent is built from); a drift test keeps every copy in sync.
@@ -129,10 +155,12 @@ def repo_map(path: str = ".") -> str:
 
 
 
-# The advisor reads the executor's LIVE conversation. solve() refreshes the
-# reference every iteration: compaction replaces the messages list object, so
-# a one-time capture would silently go stale.
-_ADVISOR_STATE = {"messages": None, "client": None, "in": 0, "out": 0}
+# The advisor reads the executor's LIVE conversation. It holds the history and
+# folds themselves rather than a message list: both are stable objects that are
+# only ever appended to, so solve() sets these once and they can't go stale.
+# (Before compaction became non-destructive, compact() returned a NEW list each
+# time and this reference had to be refreshed every iteration.)
+_ADVISOR_STATE = {"history": None, "folds": None, "client": None, "in": 0, "out": 0}
 
 _ADVISOR_SYSTEM = (
     "You are a senior engineer advising a colleague who is mid-task on a "
@@ -143,6 +171,31 @@ _ADVISOR_SYSTEM = (
     "table, say which one the issue wording and the codebase's own idioms "
     "favor, and why. Advise -- do not write the full patch."
 )
+
+
+def _advisor_messages() -> list:
+    """The messages the advisor is shown, per ADVISOR_CONTEXT (see above)."""
+    history = _ADVISOR_STATE["history"] or []
+    folds = _ADVISOR_STATE["folds"] or []
+    if ADVISOR_CONTEXT != "full":
+        return build_view(history, folds)
+    if _count_tokens(history) <= ADVISOR_CONTEXT_MAX_TOKENS:
+        return history
+    # Too big for one call: keep the head (system prompt + the task, which the
+    # advice has to be aimed at) and as many of the NEWEST messages as fit.
+    # A blunt cut on purpose -- summarizing here would just rebuild the view
+    # that "full" was chosen to avoid. Cutting mid-conversation can orphan a
+    # tool result from its call, which is fine here and only here: this list is
+    # rendered to text for a single prompt, never sent as a message array.
+    head, rest = history[:2], history[2:]
+    budget = ADVISOR_CONTEXT_MAX_TOKENS - _count_tokens(head)
+    kept = []
+    for m in reversed(rest):
+        budget -= _count_tokens([m])
+        if budget <= 0:
+            break
+        kept.append(m)
+    return head + list(reversed(kept))
 
 
 def _render_transcript(messages) -> str:
@@ -175,7 +228,7 @@ def _render_transcript(messages) -> str:
 def ask_advisor(question: str) -> str:
     prompt = (
         "Transcript of my work so far:\n\n"
-        + _render_transcript(_ADVISOR_STATE["messages"] or [])
+        + _render_transcript(_advisor_messages())
         + "\n\n=== MY QUESTION ===\n" + question
     )
     resp = _chat_with_retry(
@@ -282,12 +335,21 @@ def solve(repo_dir: Path, problem_statement: str, audit=None) -> str:
         base_tools.append(ask_advisor)
     base_by_name = {t.__name__: t for t in base_tools}
 
-    messages = [
-        {"role": "system", "content": SYSTEM},
-        {"role": "user", "content": problem_statement},
-    ]
+    # Append-only canonical history + the folds compaction records against it;
+    # what the model sees each turn is derived from the two (Ep 3's mechanism).
+    history: list = []
+    folds: list = []
+    MESSAGE_LOG.unlink(missing_ok=True)
+
+    def record(message):
+        """Add a message to the canonical history, and to the on-disk log."""
+        history.append(message)
+        log_entry({"kind": "message", **message})
+
+    record({"role": "system", "content": SYSTEM})
+    record({"role": "user", "content": problem_statement})
     _ADVISOR_STATE.update({
-        "messages": messages,
+        "history": history, "folds": folds,
         "client": client if ADVISOR_BASE_URL == BASE_URL else _client(ADVISOR_BASE_URL),
         "in": 0, "out": 0,
     })
@@ -301,20 +363,22 @@ def solve(repo_dir: Path, problem_statement: str, audit=None) -> str:
     while iteration < MAX_ITERATIONS:
         iteration += 1
         tools.CURRENT_ROUND = iteration
-        _ADVISOR_STATE["messages"] = messages  # compaction swaps the list object
-        messages[0] = {"role": "system",
-                       "content": system_with_skills(system_with_plan(SYSTEM))}
+        # What the model sees this turn: derived from the history, then the
+        # system prompt rebuilt with the plan and any loaded skills.
+        view = build_view(history, folds)
+        view[0] = {"role": "system",
+                   "content": system_with_skills(system_with_plan(SYSTEM))}
         by_name = {**base_by_name, **skills.LOADED_TOOLS}
         tool_defs = [fn.tool_definition for fn in by_name.values()]
 
-        resp = _chat_with_retry(client, model=MODEL, messages=messages, tools=tool_defs)
+        resp = _chat_with_retry(client, model=MODEL, messages=view, tools=tool_defs)
         # Some providers (notably OpenRouter's free tiers) omit usage on some
         # responses; count what's reported rather than crashing the run.
         if resp.usage is not None:
             total_in += resp.usage.prompt_tokens
             total_out += resp.usage.completion_tokens
         msg = resp.choices[0].message
-        messages.append(msg.model_dump(exclude_none=True))
+        record(msg.model_dump(exclude_none=True))
         if not msg.tool_calls:
             # The stop handshake: the model just REQUESTED a stop; the audit
             # hook is the environment deciding whether to GRANT it. Findings
@@ -326,7 +390,7 @@ def solve(repo_dir: Path, problem_statement: str, audit=None) -> str:
                 audit_bounces += 1
                 print(f"[iter {iteration}] [audit bounce: {len(findings)} finding(s)]",
                       flush=True)
-                messages.append({"role": "user", "content": (
+                record({"role": "user", "content": (
                     "AUDIT: your submission was checked before acceptance and "
                     "was not accepted:\n"
                     + "\n".join(f"- {f}" for f in findings)
@@ -351,9 +415,16 @@ def solve(repo_dir: Path, problem_statement: str, audit=None) -> str:
             except (TypeError, KeyError, json.JSONDecodeError, ValueError) as e:
                 result = f"Error executing {tc.function.name}: {type(e).__name__}: {e}"
                 print(f"[iter {iteration}] ! {result}", flush=True)
-            messages.append({"role": "tool", "tool_call_id": tc.id, "content": result})
-        messages, did, ci, co, _ = compact(messages, client, MODEL)
-        if did:
+            record({"role": "tool", "tool_call_id": tc.id, "content": result})
+        # compact() returns a summary and how much tail to keep; recording that
+        # as a fold is what shrinks the next view. The history is never rewritten.
+        summary_msg, tail_len, ci, co, _ = compact(build_view(history, folds), client, MODEL)
+        if summary_msg:
+            fold = {"kind": "compaction",
+                    "tail_start": len(history) - tail_len,
+                    "summary": summary_msg}
+            folds.append(fold)
+            log_entry(fold)
             compactions += 1
             compact_in += ci
             compact_out += co
@@ -364,15 +435,18 @@ def solve(repo_dir: Path, problem_statement: str, audit=None) -> str:
     # what it could not verify -- without this file that conclusion is lost
     # (learned on sympy-21612: we couldn't tell an honest blocked engineer
     # from a confused agent).
-    final = next((m.get("content") or "" for m in reversed(messages)
+    final = next((m.get("content") or "" for m in reversed(history)
                   if m.get("role") == "assistant"), "")
     with open("final_message.md", "w", encoding="utf-8") as f:
         f.write(final)
-    # The full message history, verbatim: every model turn, every complete
-    # tool result, the post-compaction state. tool_calls.jsonl excerpts are
-    # the quick-scan layer; this is the replay-anything layer.
+    # The full message history, verbatim: every model turn, every complete tool
+    # result -- now the ORIGINAL history rather than the post-compaction state,
+    # which a run with compactions used to lose entirely. tool_calls.jsonl
+    # excerpts are the quick-scan layer; this is the replay-anything layer, and
+    # messages.jsonl is the same content written as the run goes so it survives
+    # a crash, plus the folds -- replay those to see what the model actually saw.
     with open("transcript.json", "w", encoding="utf-8") as f:
-        json.dump(messages, f, indent=2)
+        json.dump(history, f, indent=2)
     # Same recording split as the episodes: the agent writes raw counters, the
     # harness owns collection/reporting. The runner moves this into the batch dir.
     metrics = {
