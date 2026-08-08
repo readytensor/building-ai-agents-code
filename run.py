@@ -258,7 +258,8 @@ def main() -> int:
     )
     parser.add_argument(
         "--collect", action="append", default=None,
-        help="agent output file(s) to move into the run folder (default: tool_calls.jsonl)",
+        help="agent output file(s) to move into the run folder "
+             "(default: tool_calls.jsonl, metrics.json, messages.jsonl)",
     )
     parser.add_argument(
         "command", nargs=argparse.REMAINDER,
@@ -269,7 +270,9 @@ def main() -> int:
     cwd = Path(args.cwd).resolve()
     command = capture.resolve_command(args.command)
     logs_dir = Path(args.logdir).resolve() if args.logdir else cwd / "logs"
-    collect = args.collect if args.collect is not None else ["tool_calls.jsonl", "metrics.json"]
+    collect = args.collect if args.collect is not None else [
+        "tool_calls.jsonl", "metrics.json", "messages.jsonl",
+    ]
 
     run_dir = make_run_dir(logs_dir)
     print(f"[run] {' '.join(command)}  ->  {run_dir}\n", flush=True)

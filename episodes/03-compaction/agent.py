@@ -3,8 +3,15 @@ Episode 3 — Compaction
 
 Adds one thing to Ep 2's agent: rolling-summary compaction. When the compactable
 *middle* of the message history grows past COMPACTION_THRESHOLD, that middle is
-summarized and replaced with one summary message — so a long-running task doesn't
-keep re-paying for the full transcript on every turn.
+summarized and one summary message stands in for it — so a long-running task
+doesn't keep re-paying for the full transcript on every turn.
+
+The history itself is append-only. Nothing is ever deleted from it: compaction
+records a *fold* (a summary plus where the preserved tail starts), and what we
+send the model each turn is derived from the two by build_view(). Compaction
+shrinks the payload, not the record — and the whole run, folds included, is
+appended to messages.jsonl as it happens, so a run that dies mid-task still
+leaves a complete transcript behind.
 
 The action space is unchanged from Ep 2 (same tools.py). Completion is still the
 natural stop: the loop ends when the model emits no tool calls — its trained
@@ -35,13 +42,28 @@ load_dotenv(Path("../../.env"))
 
 import tools as tools_module  # noqa: E402  aliased: run_agent's `tools` parameter takes the canonical name; the loop sets tools_module.CURRENT_ROUND each turn
 from tools import SANDBOX, TOOLS, write_tool_telemetry  # noqa: E402
-from compaction import COMPACTION_THRESHOLD, KEEP_LAST_ITERATIONS, compact, _count_tokens  # noqa: E402
+from compaction import COMPACTION_THRESHOLD, KEEP_LAST_ITERATIONS, build_view, compact, _count_tokens  # noqa: E402
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 # The agent's working directory: a fresh copy of initial/, reset by main().
 # SANDBOX itself is defined in tools.py — the tools are bound to it.
 INITIAL = Path("initial")
+
+# The canonical transcript, written as the run goes rather than at the end — so
+# a run that crashes mid-task still leaves everything up to that point on disk.
+# It holds two kinds of entry: every message exactly as it happened, and one
+# record per compaction. Both views are recoverable from the one file — what
+# happened is the messages in order; what the model saw at any point is the
+# messages with each fold applied.
+MESSAGE_LOG = Path("messages.jsonl")
+
+
+def log_entry(entry: dict):
+    """Append one entry to MESSAGE_LOG. Opened and closed per write, so the line
+    is on disk before the next thing happens."""
+    with open(MESSAGE_LOG, "a", encoding="utf-8") as f:
+        f.write(json.dumps(entry) + "\n")
 
 
 def make_client(base_url: str) -> OpenAI:
@@ -130,17 +152,31 @@ def run_agent(client, model: str, system: str, tools: list,
     calls record themselves in tools.py)."""
     tools_by_name = {t.__name__: t for t in tools}
     tool_defs = [t.tool_definition for t in tools]
-    messages = [
-        {"role": "system", "content": system},
-        {"role": "user", "content": task},
-    ]
+
+    # The canonical history: append-only. Nothing is ever removed from it or
+    # rewritten in it — compaction records a fold instead (see below), and what
+    # the model sees is derived from the two.
+    history = []
+    folds = []
+    MESSAGE_LOG.unlink(missing_ok=True)
+
+    def record(message):
+        """Add a message to the canonical history, and to the on-disk log."""
+        history.append(message)
+        log_entry({"kind": "message", **message})
+
+    record({"role": "system", "content": system})
+    record({"role": "user", "content": task})
     iteration = 0
 
     while iteration < MAX_ITERATIONS:
         iteration += 1
         tools_module.CURRENT_ROUND = iteration   # tag tool calls with the round they happen in
+        # What the model sees this turn: derived from the history, not the
+        # history itself. Until the first compaction the two are identical.
+        view = build_view(history, folds)
         resp = client.chat.completions.create(
-            model=model, messages=messages, tools=tool_defs,
+            model=model, messages=view, tools=tool_defs,
         )
         u = resp.usage
         USAGE["iterations"] = iteration
@@ -150,7 +186,7 @@ def run_agent(client, model: str, system: str, tools: list,
 
         msg = resp.choices[0].message
         USAGE["per_iter"][-1]["tools"] = len(msg.tool_calls or [])   # tool calls requested this round
-        messages.append(msg.model_dump(exclude_none=True))
+        record(msg.model_dump(exclude_none=True))
 
         if not msg.tool_calls:
             # Natural stop: no tool calls means the model considers the task done.
@@ -179,7 +215,7 @@ def run_agent(client, model: str, system: str, tools: list,
             print(f"  {preview}\n")
             tool_msg = {"role": "tool", "tool_call_id": tc.id, "content": result}
             round_tool_msgs.append(tool_msg)
-            messages.append(tool_msg)
+            record(tool_msg)
 
         # Tool results are most of the context growth: the model only *requests* a tool
         # (small `out`), but the result it hands back can be huge (a file read). Record
@@ -189,16 +225,29 @@ def run_agent(client, model: str, system: str, tools: list,
         # Compaction: compact() summarizes the older middle once the MIDDLE's own
         # token count crosses the threshold, and no-ops otherwise — so it's safe to
         # call every turn; it only summarizes when there's enough stale middle to be
-        # worth it (and with KEEP small, the fire drops the input hard).
-        before = len(messages)
-        messages, did, ci, co, middle_tok = compact(messages, summarizer_client, summarizer_model)
+        # worth it (and with KEEP small, the fire drops the input hard). It reads
+        # the current view and returns a summary; it never rewrites the history.
+        view = build_view(history, folds)
+        summary_msg, tail_len, ci, co, middle_tok = compact(view, summarizer_client, summarizer_model)
         USAGE["per_iter"][-1]["middle"] = middle_tok   # compactable-middle size this turn (the sawtooth metric)
         USAGE["compact_in"] += ci    # counted even when the summary was rejected —
         USAGE["compact_out"] += co   # a guard-skipped attempt still spent these tokens
-        if did:
+        if summary_msg:
+            # The fold: from here on, this summary stands in for everything
+            # between the head and the preserved tail. Recording where the tail
+            # starts is enough to locate it, because the tail is always the
+            # newest messages and history only ever grows.
+            fold = {
+                "kind": "compaction",
+                "tail_start": len(history) - tail_len,
+                "summary": summary_msg,
+            }
+            folds.append(fold)
+            log_entry(fold)
             USAGE["compactions"] += 1
             USAGE["per_iter"][-1]["compacted"] = True   # the middle crossed the threshold this iteration
-            print(f"  [COMPACTION FIRED — {before} messages → {len(messages)}, summarizer in={ci} out={co}]\n")
+            print(f"  [COMPACTION FIRED — {len(view)} messages → {len(build_view(history, folds))}, "
+                  f"history still {len(history)}, summarizer in={ci} out={co}]\n")
         elif ci:
             # The guard in compact() rejected a truncated/empty summary reply.
             print(f"  [COMPACTION SKIPPED — summary reply hit its token cap; keeping full history this round (summarizer in={ci} out={co})]\n")
