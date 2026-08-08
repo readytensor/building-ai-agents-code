@@ -13,13 +13,15 @@ What Ep 5 adds (all in skills.py):
     web_search + fetch_url (research), lint + coverage (verification).
 
 The system-prompt injection reuses Ep 4's dynamic-system-prompt mechanism:
-each turn the loop rebuilds messages[0] as base + plan + loaded-skill bodies
-(see skills.system_with_skills wrapped around planning.system_with_plan).
-Because skills live in agent state, not message history, they survive
-compaction and keep the message prefix stable.
+each turn the loop rebuilds the view's system message as base + plan +
+loaded-skill bodies (see skills.system_with_skills wrapped around
+planning.system_with_plan). Because skills live in agent state, not message
+history, they survive compaction and keep the message prefix stable.
 
 Everything else is inherited: the action space (tools.py), rolling-summary
-compaction (compaction.py), the plan (planning.py), the sandbox reset,
+compaction (compaction.py — non-destructive: the history is append-only and
+what the model sees is rebuilt from it each turn by build_view, with the run
+appended to messages.jsonl as it goes), the plan (planning.py), the sandbox reset,
 and the natural stop — the loop ends when the model emits no tool calls.
 (No self-assessed done tool; rigorous, externally-verified completion is the
 job of the `verification` skill, which runs the tests before the agent stops.)
@@ -46,7 +48,7 @@ load_dotenv(Path("../../.env"))
 import skills  # noqa: E402  module ref so the loop can read skills.LOADED_TOOLS each turn
 import tools as tools_module  # noqa: E402  aliased: run_agent's `tools` parameter takes the canonical name; the loop sets tools_module.CURRENT_ROUND each turn
 from tools import SANDBOX, TOOLS as FILE_TOOLS, write_tool_telemetry  # noqa: E402
-from compaction import COMPACTION_THRESHOLD, KEEP_LAST_ITERATIONS, compact, _count_tokens  # noqa: E402
+from compaction import COMPACTION_THRESHOLD, KEEP_LAST_ITERATIONS, build_view, compact, _count_tokens  # noqa: E402
 from planning import write_plan, system_with_plan  # noqa: E402
 from skills import list_skills, load_skill, system_with_skills  # noqa: E402
 
@@ -55,6 +57,21 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 # The agent's working directory: a fresh copy of initial/, reset by main().
 # SANDBOX itself is defined in tools.py — the tools are bound to it.
 INITIAL = Path("initial")
+
+# The canonical transcript, written as the run goes rather than at the end — so
+# a run that crashes mid-task still leaves everything up to that point on disk.
+# It holds two kinds of entry: every message exactly as it happened, and one
+# record per compaction. Both views are recoverable from the one file — what
+# happened is the messages in order; what the model saw at any point is the
+# messages with each fold applied.
+MESSAGE_LOG = Path("messages.jsonl")
+
+
+def log_entry(entry: dict):
+    """Append one entry to MESSAGE_LOG. Opened and closed per write, so the line
+    is on disk before the next thing happens."""
+    with open(MESSAGE_LOG, "a", encoding="utf-8") as f:
+        f.write(json.dumps(entry) + "\n")
 
 
 def make_client(base_url: str) -> OpenAI:
@@ -171,21 +188,34 @@ def run_agent(client, model: str, system: str, tools: list,
     MAX_ITERATIONS first. Records token usage into USAGE along the way (tool
     calls record themselves in tools.py)."""
     base_tools_by_name = {t.__name__: t for t in tools}
-    messages = [
-        {"role": "system", "content": system},
-        {"role": "user", "content": task},
-    ]
+    # The canonical history: append-only. Nothing is ever removed from it or
+    # rewritten in it — compaction records a fold instead (see below), and what
+    # the model sees is derived from the two.
+    history = []
+    folds = []
+    MESSAGE_LOG.unlink(missing_ok=True)
+
+    def record(message):
+        """Add a message to the canonical history, and to the on-disk log."""
+        history.append(message)
+        log_entry({"kind": "message", **message})
+
+    record({"role": "system", "content": system})
+    record({"role": "user", "content": task})
     iteration = 0
 
     while iteration < MAX_ITERATIONS:
         iteration += 1
         tools_module.CURRENT_ROUND = iteration   # tag tool calls with the round they happen in
 
-        # Dynamic system prompt: rebuild messages[0] from the stable base plus the
-        # current plan plus any loaded-skill bodies. All of these live in agent
-        # state (not message history), so this re-injects them fresh each turn
-        # without ever touching the transcript.
-        messages[0] = {"role": "system", "content": system_with_skills(system_with_plan(system))}
+        # What the model sees this turn, derived rather than stored: the history
+        # projected through its folds, then the system prompt rebuilt from the
+        # stable base plus the current plan plus any loaded-skill bodies. All of
+        # these live in agent state (not message history), so they are re-injected
+        # fresh each turn without ever entering the transcript — and because the
+        # view is a fresh list, writing to it can't disturb the record underneath.
+        view = build_view(history, folds)
+        view[0] = {"role": "system", "content": system_with_skills(system_with_plan(system))}
 
         # The toolset grows as skills load, so rebuild it each turn: the base
         # tools passed in, plus any tools unlocked by skills loaded so far.
@@ -193,7 +223,7 @@ def run_agent(client, model: str, system: str, tools: list,
         tool_defs = [fn.tool_definition for fn in tools_by_name.values()]
 
         resp = client.chat.completions.create(
-            model=model, messages=messages, tools=tool_defs,
+            model=model, messages=view, tools=tool_defs,
         )
         u = resp.usage
         USAGE["iterations"] = iteration
@@ -203,7 +233,7 @@ def run_agent(client, model: str, system: str, tools: list,
 
         msg = resp.choices[0].message
         USAGE["per_iter"][-1]["tools"] = len(msg.tool_calls or [])   # tool calls requested this round
-        messages.append(msg.model_dump(exclude_none=True))
+        record(msg.model_dump(exclude_none=True))
 
         if not msg.tool_calls:
             # Natural stop: no tool calls means the model considers the task done.
@@ -242,7 +272,7 @@ def run_agent(client, model: str, system: str, tools: list,
             print(f"  {preview}\n")
             tool_msg = {"role": "tool", "tool_call_id": tc.id, "content": result}
             round_tool_msgs.append(tool_msg)
-            messages.append(tool_msg)
+            record(tool_msg)
 
         # Tool results are most of the context growth: the model only *requests* a tool
         # (small `out`), but the result it hands back can be huge (a file read). Record
@@ -252,16 +282,29 @@ def run_agent(client, model: str, system: str, tools: list,
         # Compaction: compact() summarizes the older middle once the MIDDLE's own
         # token count crosses the threshold, and no-ops otherwise — so it's safe to
         # call every turn; it only summarizes when there's enough stale middle to be
-        # worth it (and with KEEP small, the fire drops the input hard).
-        before = len(messages)
-        messages, did, ci, co, middle_tok = compact(messages, summarizer_client, summarizer_model)
+        # worth it (and with KEEP small, the fire drops the input hard). It reads
+        # the current view and returns a summary; it never rewrites the history.
+        view = build_view(history, folds)
+        summary_msg, tail_len, ci, co, middle_tok = compact(view, summarizer_client, summarizer_model)
         USAGE["per_iter"][-1]["middle"] = middle_tok   # compactable-middle size this turn (the sawtooth metric)
         USAGE["compact_in"] += ci    # counted even when the summary was rejected —
         USAGE["compact_out"] += co   # a guard-skipped attempt still spent these tokens
-        if did:
+        if summary_msg:
+            # The fold: from here on, this summary stands in for everything
+            # between the head and the preserved tail. Recording where the tail
+            # starts is enough to locate it, because the tail is always the
+            # newest messages and history only ever grows.
+            fold = {
+                "kind": "compaction",
+                "tail_start": len(history) - tail_len,
+                "summary": summary_msg,
+            }
+            folds.append(fold)
+            log_entry(fold)
             USAGE["compactions"] += 1
             USAGE["per_iter"][-1]["compacted"] = True   # the middle crossed the threshold this iteration
-            print(f"  [COMPACTION FIRED — {before} messages → {len(messages)}, summarizer in={ci} out={co}]\n")
+            print(f"  [COMPACTION FIRED — {len(view)} messages → {len(build_view(history, folds))}, "
+                  f"history still {len(history)}, summarizer in={ci} out={co}]\n")
         elif ci:
             # The guard in compact() rejected a truncated/empty summary reply.
             print(f"  [COMPACTION SKIPPED — summary reply hit its token cap; keeping full history this round (summarizer in={ci} out={co})]\n")

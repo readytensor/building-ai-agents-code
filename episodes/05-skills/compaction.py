@@ -4,11 +4,17 @@ Episode 5 — Skills (compaction)
 Ep 3's headline mechanism, carried forward unchanged: rolling-summary
 compaction. When the compactable *middle* of the message history grows past
 COMPACTION_THRESHOLD, that middle is summarized via a second LLM call and
-replaced with one summary message — so a long-running task doesn't keep paying
-for the full transcript every turn. If the summarizer call fails (an empty or
-cap-truncated reply), nothing is installed — the round is skipped and the next
-turn retries — so a bad summary can never replace the history it was meant to
-compress.
+one summary message stands in for it — so a long-running task doesn't keep
+paying for the full transcript every turn. If the summarizer call fails (an
+empty or cap-truncated reply), nothing is installed — the round is skipped and
+the next turn retries — so a bad summary can never stand in for the history it
+was meant to compress.
+
+Compaction is *non-destructive*: compact() never rewrites the history it is
+handed. It returns the summary it wrote and how many recent messages to keep
+verbatim, and the caller records that as a **fold**. The canonical history
+stays append-only, and what the model sees is rebuilt from it each turn by
+build_view() — so the payload shrinks while the record doesn't.
 
 This file is identical to Ep 4's compaction.py. We trigger on the token count of
 the *middle* — the part that actually gets summarized — not the whole call's
@@ -95,20 +101,50 @@ def _count_tokens(messages):
     return len(_TOKENIZER.encode("\n".join(parts)))
 
 
+def build_view(history, folds):
+    """Build what the model sees this turn out of the append-only `history`.
+
+    With no folds yet, the view *is* the history. After a compaction it's the
+    head (system prompt + original task), the summary that compaction produced,
+    and every message appended since — rebuilt fresh each turn and never written
+    back over `history`.
+
+    A fold only has to record where the preserved tail begins, because the tail
+    is always the newest messages and `history` is append-only: an index into it
+    means the same thing forever. The newest fold is the only one the view
+    needs, since each summary subsumes the one before it.
+    """
+    if not folds:
+        return list(history)
+    latest = folds[-1]
+    return history[:2] + [latest["summary"]] + history[latest["tail_start"]:]
+
+
 def compact(messages, client, model):
     """Summarize the middle of `messages`, preserving system prompt, original
-    task, and the last K rounds. Returns (new_messages, did_compact, in, out,
-    middle_tokens) — middle_tokens is the compactable middle's size (the trigger
-    metric), returned every turn so the per-iter sawtooth can be plotted."""
+    task, and the last K rounds.
+
+    Returns (summary_msg, tail_len, in, out, middle_tokens):
+      summary_msg    the summary to fold in, or None when nothing was compacted
+                     (middle too small, or the guard rejected the reply)
+      tail_len       how many of the newest messages the fold keeps verbatim
+      in / out       summarizer tokens, spent even when the reply was rejected
+      middle_tokens  the compactable middle's size (the trigger metric),
+                     returned every turn so the per-iter sawtooth can be plotted
+
+    Note what is *not* in that list: a rewritten message history. compact()
+    leaves `messages` untouched and hands the summary back to the caller to
+    record as a fold — that's what makes this non-destructive.
+    """
     asst_positions = [i for i, m in enumerate(messages) if m.get("role") == "assistant"]
     if len(asst_positions) <= KEEP_LAST_ITERATIONS:
-        return messages, False, 0, 0, 0
+        return None, 0, 0, 0, 0
     head = messages[:2]                            # system + original user task
     tail_start = asst_positions[-KEEP_LAST_ITERATIONS]
     middle = messages[2:tail_start]
-    tail = messages[tail_start:]
+    tail_len = len(messages) - tail_start          # the fold keeps this many newest messages
     if not middle:
-        return messages, False, 0, 0, 0
+        return None, 0, 0, 0, 0
 
     # Fire only when the MIDDLE (what we'd summarize) is big enough to be worth a
     # summarizer call. Counting the middle — not the total input — means we never
@@ -116,7 +152,7 @@ def compact(messages, client, model):
     # middle_tokens is returned every turn (fired or not) for the per-iter sawtooth.
     middle_tokens = _count_tokens(middle)
     if middle_tokens <= COMPACTION_THRESHOLD:
-        return messages, False, 0, 0, middle_tokens
+        return None, 0, 0, 0, middle_tokens
 
     summarizer_msgs = [
         {"role": "system", "content": SUMMARIZER_PROMPT},
@@ -130,13 +166,18 @@ def compact(messages, client, model):
     )
     summary_text = (summary_resp.choices[0].message.content or "").strip()
     su = summary_resp.usage
-    # Guard: never install a bad summary over the middle it replaces. An empty
-    # reply, or one cut off by the token cap (finish_reason "length" — e.g. a
-    # reasoning spiral ate the budget and left a stub), is a failed attempt:
-    # skip compaction this round, keep the full history, and simply try again
-    # next turn (a retry normally succeeds).
+    # Guard: never fold in a bad summary. An empty reply, or one cut off by the
+    # token cap (finish_reason "length" — e.g. a reasoning spiral ate the budget
+    # and left a stub), is a failed attempt: record no fold this round, so the
+    # next view is still the full history, and simply try again next turn (a
+    # retry normally succeeds).
     if not summary_text or summary_resp.choices[0].finish_reason == "length":
-        return messages, False, su.prompt_tokens, su.completion_tokens, middle_tokens
+        return None, 0, su.prompt_tokens, su.completion_tokens, middle_tokens
+    # The summary is an ordinary message, and it takes the place of the middle
+    # *in the view* — same position, so its scope is legible from where it sits.
+    # It goes in as "user" because nobody actually said it: an assistant role
+    # would claim the model produced it. The fold record the caller writes is
+    # where the truth about its origin lives.
     summary_msg = {
         "role": "user",
         "content": (
@@ -145,4 +186,4 @@ def compact(messages, client, model):
             "[End of summary. Continue with the most recent turns.]"
         ),
     }
-    return head + [summary_msg] + tail, True, su.prompt_tokens, su.completion_tokens, middle_tokens
+    return summary_msg, tail_len, su.prompt_tokens, su.completion_tokens, middle_tokens

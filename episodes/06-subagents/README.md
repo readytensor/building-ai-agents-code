@@ -20,6 +20,7 @@ Roles are enforced by **toolset, not exhortation**: the orchestrator gets no cod
 - `.skills/`: `research` and `verification`, carried forward from Ep 5; at the episode root alongside the agent's code (agent infrastructure, not part of the toy codebase, so not inside `initial/`)
 - `initial/`: `md2html` with three independent test fixtures (one per feature below); each fails until its feature is implemented
 - `sandbox/`: gitignored, recreated on every run
+- `messages.jsonl`: gitignored run artifact, written as the run goes. Each agent keeps its own append-only history and compacts non-destructively (Ep 3's mechanism, per worker), but they all append to this one file with their label attached, so the whole tree's transcript lands in one place. Filter by `agent` to replay a single worker
 
 **Run:**
 

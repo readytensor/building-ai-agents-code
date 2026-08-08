@@ -11,10 +11,14 @@ What Ep 6 adds:
 1. run_agent(task, agent_type) -> str — Ep 5's loop, refactored into a
    function and used recursively: the orchestrator is run_agent(TASK,
    "orchestrator"); each worker is run_agent(subtask, agent_type). ALL
-   formerly-module-level state (plan, loaded skills, tools, messages,
+   formerly-module-level state (plan, loaded skills, tools, history + folds,
    counters) is now per-call function-local — so concurrent workers don't
    share state. (This is why Ep 6's planning.py and skills.py expose per-call
-   factories instead of module globals.)
+   factories instead of module globals.) Compaction stays non-destructive
+   per agent: each keeps its own append-only history and derives its own view
+   (build_view). The one shared thing is messages.jsonl, where every agent
+   appends its entries tagged with its label, so the whole tree lands in one
+   file as it runs.
 
 2. delegate(task, agent_type) — calls run_agent recursively. Bound only into
    the orchestrator's toolset, never a worker's.
@@ -66,7 +70,7 @@ import planning  # noqa: E402
 import skills  # noqa: E402
 import tools  # noqa: E402  module ref so run_agent can append to tools.TOOL_CALLS
 from tools import SANDBOX, tool, write_tool_telemetry  # noqa: E402
-from compaction import COMPACTION_THRESHOLD, KEEP_LAST_ITERATIONS, compact  # noqa: E402
+from compaction import COMPACTION_THRESHOLD, KEEP_LAST_ITERATIONS, build_view, compact  # noqa: E402
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
@@ -126,6 +130,26 @@ def _print(label: str, text: str) -> None:
     with _PRINT_LOCK:
         for line in text.splitlines() or [""]:
             print(f"[{label}] {line}", flush=True)
+
+
+# The canonical transcript, written as the run goes rather than at the end — so
+# a run that crashes mid-task still leaves everything up to that point on disk.
+# It holds two kinds of entry: every message exactly as it happened, and one
+# record per compaction. Every agent writes to the same file and tags its
+# entries with its label (same shape as tool_calls.jsonl), so one file holds the
+# whole tree; filter by "agent" to replay a single worker. Concurrent workers
+# append from their own threads, hence the lock. Truncated once per run in
+# main(), never in run_agent — a worker starting must not wipe its siblings.
+MESSAGE_LOG = Path("messages.jsonl")
+_LOG_LOCK = threading.Lock()
+
+
+def log_entry(label: str, entry: dict) -> None:
+    """Append one labelled entry to MESSAGE_LOG. Opened and closed per write, so
+    the line is on disk before the next thing happens."""
+    with _LOG_LOCK:
+        with open(MESSAGE_LOG, "a", encoding="utf-8") as f:
+            f.write(json.dumps({"agent": label, **entry}) + "\n")
 
 
 def _preview_args(args: dict) -> str:
@@ -366,10 +390,20 @@ def run_agent(task: str, agent_type: str) -> str:
                 tools_by_name[st] = skills._SKILL_TOOLS_REGISTRY[st]
         metrics.loaded_skill_names.append(skill_name)
 
-    messages = [
-        {"role": "system", "content": cfg.prompt},  # rebuilt each turn (plan+skills)
-        {"role": "user", "content": task},
-    ]
+    # This agent's canonical history: append-only, and per-call like everything
+    # else here — the orchestrator and each worker keep their own. Nothing is
+    # ever removed from it; compaction records a fold instead, and what the
+    # model sees is derived from the two.
+    history: list[dict] = []
+    folds: list[dict] = []
+
+    def record(message):
+        """Add a message to this agent's history, and to the shared on-disk log."""
+        history.append(message)
+        log_entry(label, {"kind": "message", **message})
+
+    record({"role": "system", "content": cfg.prompt})  # rebuilt each turn (plan+skills)
+    record({"role": "user", "content": task})
     iter_cap = MAX_ITERATIONS if is_orchestrator else MAX_WORKER_ITER
 
     p(f"=== START agent_type={agent_type} iter_cap={iter_cap} ===")
@@ -378,10 +412,14 @@ def run_agent(task: str, agent_type: str) -> str:
     while metrics.iterations < iter_cap:
         metrics.iterations += 1
 
-        # Dynamic system prompt: stable base + this agent's plan + loaded-skill
-        # bodies. All live in per-call state, so this re-injects them fresh each
-        # turn without touching the transcript.
-        messages[0] = {
+        # What this agent sees this turn, derived rather than stored: its history
+        # projected through its folds, then the system prompt rebuilt from the
+        # stable base + its plan + loaded-skill bodies. All live in per-call
+        # state, so they are re-injected fresh each turn without entering the
+        # transcript — and because the view is a fresh list, writing to it can't
+        # disturb the record underneath.
+        view = build_view(history, folds)
+        view[0] = {
             "role": "system",
             "content": skills.system_with_skills(
                 planning.system_with_plan(cfg.prompt, plan), loaded_skills
@@ -391,14 +429,14 @@ def run_agent(task: str, agent_type: str) -> str:
         tool_defs = [fn.tool_definition for fn in tools_by_name.values()]
 
         resp = client.chat.completions.create(
-            model=MODEL, messages=messages, tools=tool_defs,
+            model=MODEL, messages=view, tools=tool_defs,
         )
         u = resp.usage
         metrics.input_tokens += u.prompt_tokens
         metrics.output_tokens += u.completion_tokens
 
         msg = resp.choices[0].message
-        messages.append(msg.model_dump(exclude_none=True))
+        record(msg.model_dump(exclude_none=True))
 
         if not msg.tool_calls:
             # Natural stop — no tool calls means this agent is done. Its final
@@ -473,18 +511,30 @@ def run_agent(task: str, agent_type: str) -> str:
         # Append one tool message per tool_call_id, in call order (the API
         # requires a result for every tool call the assistant made).
         for tc in msg.tool_calls:
-            messages.append({"role": "tool", "tool_call_id": tc.id,
-                             "content": results_by_id.get(tc.id, "")})
+            record({"role": "tool", "tool_call_id": tc.id,
+                    "content": results_by_id.get(tc.id, "")})
 
-        # Compaction — per-worker, on this agent's own message history.
-        before = len(messages)
-        messages, did, ci, co, _middle = compact(messages, summarizer_client, SUMMARIZER_MODEL)
+        # Compaction — per-worker, on this agent's own history. compact() reads
+        # the current view and returns a summary; it never rewrites the history.
+        view = build_view(history, folds)
+        summary_msg, tail_len, ci, co, _middle = compact(view, summarizer_client, SUMMARIZER_MODEL)
         metrics.compact_in += ci     # counted even when the summary was rejected —
         metrics.compact_out += co    # a guard-skipped attempt still spent these tokens
-        if did:
+        if summary_msg:
+            # The fold: from here on, this summary stands in for everything
+            # between the head and the preserved tail. Recording where the tail
+            # starts is enough to locate it, because the tail is always the
+            # newest messages and history only ever grows.
+            fold = {
+                "kind": "compaction",
+                "tail_start": len(history) - tail_len,
+                "summary": summary_msg,
+            }
+            folds.append(fold)
+            log_entry(label, fold)
             metrics.compactions += 1
-            p(f"  [COMPACTION FIRED — {before} messages → {len(messages)}, "
-              f"summarizer in={ci} out={co}]")
+            p(f"  [COMPACTION FIRED — {len(view)} messages → {len(build_view(history, folds))}, "
+              f"history still {len(history)}, summarizer in={ci} out={co}]")
         elif ci:
             # The guard in compact() rejected a truncated/empty summary reply.
             p(f"  [COMPACTION SKIPPED — summary reply hit its token cap; "
@@ -492,7 +542,7 @@ def run_agent(task: str, agent_type: str) -> str:
 
     # Iteration cap reached without a natural stop.
     last_text = ""
-    for m in reversed(messages):
+    for m in reversed(history):
         if m.get("role") == "assistant":
             last_text = m.get("content") or ""
             break
@@ -537,6 +587,9 @@ def main():
     if SANDBOX.exists():
         shutil.rmtree(SANDBOX)
     shutil.copytree(INITIAL, SANDBOX)
+    # One shared transcript for the whole agent tree — cleared here, once per
+    # run, because every agent appends to it and none of them owns it.
+    MESSAGE_LOG.unlink(missing_ok=True)
 
     print(f"USER: {TASK}\n")
     try:
