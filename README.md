@@ -32,8 +32,8 @@ Following along with the episode tasks as written is low risk, and that is how w
 ## Quickstart
 
 ```bash
-git clone https://github.com/readytensor/building-agents-code
-cd building-agents-code
+git clone https://github.com/readytensor/building-ai-agents-code
+cd building-ai-agents-code
 ```
 
 Set up a virtual environment and install the dependencies (Python 3.11+):
@@ -57,7 +57,7 @@ python agent.py
 ## How the code is organized
 
 ```
-building-agents-code/
+building-ai-agents-code/
 ├── episodes/
 │   ├── 01-loop/
 │   │   ├── agent.py           # the episode's agent: start here

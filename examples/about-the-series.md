@@ -63,10 +63,10 @@ That loop *is* Episode 1. Everything after is one deliberate addition, made only
 
 ## Who it's for
 
-Engineers comfortable with Python and calling an LLM API. No prior agent-building experience assumed. See the repo's `README.md` for setup, and the source at <https://github.com/readytensor/building-agents-code>.
+Engineers comfortable with Python and calling an LLM API. No prior agent-building experience assumed. See the repo's `README.md` for setup, and the source at <https://github.com/readytensor/building-ai-agents-code>.
 
 For the reasoning behind the build order, see the [first-principles approach][fp]: start from the loop, and add only what a real limitation demands.
 
-[fp]: https://github.com/readytensor/building-agents-code "Building Agents from First Principles"
+[fp]: https://github.com/readytensor/building-ai-agents-code "Building Agents from First Principles"
 
 [^toy]: `md2html` is small enough to read in one sitting, but structured enough that every episode's task lands on a real seam rather than an arbitrary split.

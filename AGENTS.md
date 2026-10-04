@@ -9,7 +9,7 @@ For the full series narrative, the episode table, and setup/quickstart, read [`R
 ## Finding your way around
 
 ```
-building-agents-code/
+building-ai-agents-code/
 ├── episodes/
 │   ├── 01-loop/
 │   │   ├── agent.py           # the episode's agent: start here
