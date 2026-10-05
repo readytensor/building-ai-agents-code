@@ -80,8 +80,8 @@ def bash(command: str) -> str:
             "that can loop forever, and scope file searches to the working directory."
         )
     output = (output or "").strip()
-    if len(output) > 20_000:                 # cap transcript growth from chatty commands
-        output = output[:20_000] + "\n...[truncated]"
+    if len(output) > 50_000:                 # cap transcript growth from chatty commands
+        output = output[:50_000] + "\n...[truncated]"
     if proc.returncode:                      # surface failures so the model can adapt
         output += f"\n(exit code {proc.returncode})"
     return output or "(no output)"
