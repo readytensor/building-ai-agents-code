@@ -30,6 +30,37 @@ Each episode in "Building the agent" follows the same rhythm: one question, one 
 > [!NOTE]
 > The code is being updated to this arc one episode at a time. `03-loop` and `04-tools` already carry their video numbers. `03-compaction` and `04-working-memory` are from an earlier plan and will be removed, and `05-skills` and `06-subagents` still include that plan's compaction and planning code until their episodes are updated.
 
+## A note on safety
+
+The agent runs real shell commands with your user account's permissions. The file tools (`read`, `write`, `edit`, `grep`, `list_files`) are restricted to the `sandbox/` folder and cannot escape it, but `bash` is not: the sandbox is only its starting directory, and nothing prevents a command from using `cd ..` or an absolute path. The model decides what commands to run, so treat every run as untrusted.
+
+Following along with the episode tasks as written is low risk, and that is how we run it. If you point the agent at your own tasks, your own repositories, or open-ended experiments, run it inside a Docker container or a throwaway VM, not directly on a machine you care about. Real agent products solve this with OS-level sandboxes and containers; that layer is out of scope for this series on purpose.
+
+## Quickstart
+
+```bash
+git clone https://github.com/readytensor/building-ai-agents-code
+cd building-ai-agents-code
+```
+
+Set up a virtual environment and install the dependencies (Python 3.11+):
+
+```bash
+python -m venv venv
+source venv/bin/activate       # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+cp .env.example .env           # add your OPENAI_API_KEY
+```
+
+Using `uv`? `uv venv && uv pip install -r requirements.txt`.
+
+Run an episode:
+
+```bash
+cd episodes/03-loop
+python agent.py
+```
+
 ## How the code is organized
 
 ```
