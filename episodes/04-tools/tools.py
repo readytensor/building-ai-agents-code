@@ -1,27 +1,33 @@
 """
 Tools
 
-The agent's action space: six general primitives (bash, list_files, read,
-write, edit, grep) plus a tiny @tool decorator (~25 lines) that builds each
-tool's JSON-schema definition from its Python signature. Every tool resolves
-paths inside SANDBOX. `list_files` is a cross-platform alternative to shell
-find/ls/dir, so navigation doesn't depend on the host shell.
+The agent's action space: general primitives for files (bash, list_files,
+read, write, edit, grep) and the web (web_search, fetch_url), plus a tiny
+@tool decorator (~25 lines) that builds each tool's JSON-schema definition
+from its Python signature. Every file path resolves inside SANDBOX.
+`list_files` is a cross-platform alternative to shell find/ls/dir, so
+navigation doesn't depend on the host shell.
 
-From Ep 2 onward the tools live here, separate from the agent loop. New
+From this episode on the tools live here, separate from the agent loop. Later
 episodes add tools to this file; agent.py imports the registry and rarely
 changes. agent.py owns the sandbox *reset* — this file just names the dir.
 
 See ../../README.md for context.
 """
 import functools
+import html as html_module
 import inspect
 import json
 import os
 import re
 import signal
 import subprocess
+import urllib.error
+import urllib.parse
+import urllib.request
 from pathlib import Path
 from typing import get_type_hints
+from urllib.parse import parse_qs, unquote, urlparse
 
 # The working directory every tool is bounded to. agent.py resets it to a clean
 # copy of initial/ at the start of each run.
@@ -119,8 +125,8 @@ def bash(command: str) -> str:
             "that can loop forever, and scope file searches to the working directory."
         )
     output = (output or "").strip()
-    if len(output) > 20_000:                 # cap transcript growth from chatty commands
-        output = output[:20_000] + "\n...[truncated]"
+    if len(output) > 50_000:                 # cap transcript growth from chatty commands
+        output = output[:50_000] + "\n...[truncated]"
     if proc.returncode:                      # surface failures so the model can adapt
         output += f"\n(exit code {proc.returncode})"
     return output or "(no output)"
@@ -185,7 +191,7 @@ def read(path: str, offset: int = 1, limit: int = 0) -> str:
     if not p.exists():
         return f"Error: {path} does not exist."
     if p.is_dir():
-        return f"Error: {path} is a directory. Use bash to list its contents."
+        return f"Error: {path} is a directory. Use list_files to see its contents."
     lines = p.read_text(encoding="utf-8", errors="replace").splitlines()
     # Number the whole file before slicing, so a slice keeps its real line
     # numbers (line 200 is still labeled 200) and matches grep/traceback output.
@@ -253,7 +259,65 @@ def grep(pattern: str, path: str = ".") -> str:
     return "\n".join(results) if results else f"No matches for {pattern!r}."
 
 
+# --- The web tools: what the model can't know from its training or the repo.
+@tool("Search the web for information you don't have: a project's documentation, an official list, a data file. Returns the top results as title, URL and snippet; then use fetch_url on the most authoritative one.")
+def web_search(query: str, max_results: int = 5) -> str:
+    # Keyless search through DuckDuckGo's HTML endpoint, scraped with two
+    # regexes: fine for a teaching agent, not a production search client.
+    browser_ua = (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/120.0 Safari/537.36"
+    )
+    try:
+        req = urllib.request.Request(
+            "https://html.duckduckgo.com/html/",
+            data=urllib.parse.urlencode({"q": query}).encode(),
+            headers={"User-Agent": browser_ua},
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:  # noqa: S310
+            body = resp.read().decode("utf-8", errors="replace")
+    except Exception as e:
+        return f"Error searching for {query!r}: {e}"
+
+    def strip_tags(s: str) -> str:
+        return html_module.unescape(re.sub(r"<[^>]+>", "", s)).strip()
+
+    def real_url(href: str) -> str:
+        # DuckDuckGo wraps each target as //duckduckgo.com/l/?uddg=<encoded-url>.
+        params = parse_qs(urlparse(href).query)
+        return unquote(params["uddg"][0]) if params.get("uddg") else href
+
+    links = re.findall(r'<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>', body, re.DOTALL)
+    snippets = re.findall(r'class="result__snippet"[^>]*>(.*?)</a>', body, re.DOTALL)
+    results = []
+    for i, (href, title) in enumerate(links[:max_results]):
+        snippet = strip_tags(snippets[i]) if i < len(snippets) else ""
+        results.append(f"{strip_tags(title)}\n  {real_url(href)}\n  {snippet}".rstrip())
+    return "\n\n".join(results) if results else f"No results for {query!r}."
+
+
+@tool("Download a web page or file. With save_to (a path in the working directory) the whole file is saved there, at any size, and only its size and first lines come back: use this for data files and long lists. Without save_to, the body comes back as text, cut at 50,000 characters.")
+def fetch_url(url: str, save_to: str = "") -> str:
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "md2html-agent/1.0"})
+        with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310
+            body = resp.read()
+    except urllib.error.HTTPError as e:
+        return f"HTTP {e.code} fetching {url}: {e.reason}"
+    except Exception as e:
+        return f"Error fetching {url}: {e}"
+    text = body.decode("utf-8", errors="replace")
+    if save_to:                              # a big file goes to disk, not into the context
+        p = _safe_path(save_to)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(body)
+        return f"Saved {len(body):,} bytes to {save_to}. It begins:\n{text[:500]}"
+    if len(text) > 50_000:                   # cap transcript growth from big pages
+        return text[:50_000] + f"\n...[truncated; full length {len(text):,} chars. Pass save_to to keep the whole file.]"
+    return text
+
+
 # --- Tool registry: name -> callable, plus the list of schemas for the LLM.
-TOOLS = [bash, list_files, read, write, edit, grep]
+TOOLS = [bash, list_files, read, write, edit, grep, web_search, fetch_url]
 TOOLS_BY_NAME = {t.__name__: t for t in TOOLS}
 TOOL_DEFS = [t.tool_definition for t in TOOLS]

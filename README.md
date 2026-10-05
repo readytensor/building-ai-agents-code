@@ -19,7 +19,7 @@ The videos are numbered straight through, in three parts.
 | 01  | Getting started    | Series Overview | What will we build?                           | Nothing yet: the loop, the project, and the plan                                      |
 | 02  | Getting started    | Project Setup   | How do I run it?                              | Nothing yet: the repository, and how to run the code                                  |
 | 03  | Building the agent | The Loop        | What is an agent?                             | A `while` loop and one `bash` tool                                                    |
-| 04  | Building the agent | Tools           | How does it actually do things?               | General tools (`read`, `write`, `edit`, `grep`, `list_files`) and a small `@tool` helper |
+| 04  | Building the agent | Tools           | How does it actually do things?               | General tools for files (`read`, `write`, `edit`, `grep`, `list_files`) and the web (`web_search`, `fetch_url`), and a small `@tool` helper |
 | 05  | Building the agent | Skills          | How does it reach beyond its fixed toolkit?   | Capabilities loaded only when needed (`list_skills`, `load_skill`, `SKILL.md`)       |
 | 06  | Building the agent | Subagents       | When is one agent not enough?                 | `delegate`, worker configs, and parallel workers, each with its own context           |
 | 07  | Building the agent | Verification    | How do we know the work is finished and good? | A completion gate at the stop, and grading outside the loop                           |

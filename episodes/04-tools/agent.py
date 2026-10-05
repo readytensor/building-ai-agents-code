@@ -1,11 +1,11 @@
 """
 Tools
 
-Adds general primitives (list_files, read, write, edit, grep) alongside bash,
-plus a tiny @tool decorator that builds each tool's JSON-schema from its
-signature.
+Adds general primitives for files (list_files, read, write, edit, grep) and
+the web (web_search, fetch_url) alongside bash, plus a tiny @tool decorator
+that builds each tool's JSON-schema from its signature.
 The tools now live in tools.py; this file is just the agent loop — which is
-identical to Ep 1 except for dispatching by tool name. Completion is still
+the same loop as before except for dispatching by tool name. Completion is still
 the natural stop: the loop ends when the model emits no tool calls.
 
 See ../../README.md for context.
@@ -54,15 +54,26 @@ def make_client(base_url: str) -> OpenAI:
 # The system prompt lives in system_prompt.md next to this file: prompt text is
 # configuration, not loop logic. Its core is shared verbatim by every episode.
 SYSTEM = (Path(__file__).parent / "system_prompt.md").read_text(encoding="utf-8")
-# The task: write a README. This continues Ep 1's second task -- only now the
-# agent has real file tools, so the file lands in a single write() call instead
-# of the many shell-escaping workarounds the bash-only agent needed in Ep 1.
-TASK = (
-    "This project has no README. Explore the codebase in the current directory "
-    "and write a README.md for it. Cover: what the project does, how to install "
-    "and use it (including the CLI), its architecture, and how to run the tests. "
-    "Base everything on what you actually find in the code; don't guess."
-)
+# The task: a real feature for md2html that needs the web. The shortcode list is
+# GitHub's, published online; the fixture pair in initial/tests/fixtures/
+# (emoji.md, emoji.html) shows the expected output and fails until the feature exists.
+TASK = """Our users write GitHub emoji shortcodes like :rocket: in their documents,
+and md2html prints them as typed. Add an emoji extension to md2html:
+
+- Every shortcode in GitHub's official list becomes its emoji, aliases
+  included (:+1: and :thumbsup: are both the thumbs-up). Use the whole list,
+  not only the common ones.
+- Unknown shortcodes, and shortcodes inside inline code or code blocks, stay
+  as typed.
+- Keep GitHub's list in the repository as a data file,
+  md2html/extensions/emoji.json, so md2html works offline and the list can
+  be updated later.
+- Implement it as a new extension under md2html/extensions/, registered like
+  the existing ones.
+
+I've added a fixture pair at tests/fixtures/emoji.md and tests/fixtures/emoji.html
+showing the expected output; it currently fails. Make it pass, add your own
+tests, and make sure the existing tests still pass too."""
 
 # --- Usage telemetry: token counts per run, recorded by run_agent as it goes.
 # The agent only RECORDS (to metrics.json); the harness (run.py) RENDERS the
@@ -103,7 +114,7 @@ def _count_tokens(messages):
 
 # --- The agent loop, as a function. The signature is the anatomy of an agent:
 # a model, a system prompt, tools, and a task — give it those, get the final
-# answer. Identical to Ep 1 except `tools` is now a list of @tool-decorated
+# answer. The same as before except `tools` is now a list of @tool-decorated
 # functions (schemas AND dispatch derive from it) instead of one hardwired tool.
 def run_agent(client, model: str, system: str, tools: list, task: str) -> str:
     """Run the agent loop on `task` until the model stops requesting tool
