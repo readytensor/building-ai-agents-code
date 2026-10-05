@@ -68,19 +68,16 @@ def fmt(v):
 
 def render_single_agent(a: dict) -> None:
     """Render usage for a single-agent run (Episodes 1-5). Only the sections
-    the episode actually recorded are shown — an episode with no cache, no
-    compaction, etc. simply omits those keys and we skip the lines."""
-    ci, co = a.get("compact_in", 0), a.get("compact_out", 0)
+    the episode actually recorded are shown — an episode with no cache, etc.
+    simply omits those keys and we skip the lines."""
     print("\n=== TOKEN USAGE ===")
     print(f"agent calls:        iterations={a['iterations']}  "
           f"input={a['input_tokens']:,}  output={a['output_tokens']:,}")
     if "cache_write" in a or "cache_read" in a:
         print(f"cache:              write={a.get('cache_write', 0):,}  read={a.get('cache_read', 0):,}")
-    if "compactions" in a:
-        print(f"compaction calls:   count={a['compactions']}  input={ci:,}  output={co:,}")
-    print(f"TOTAL:              input={a['input_tokens'] + ci:,}  "
-          f"output={a['output_tokens'] + co:,}  "
-          f"grand_total={a['input_tokens'] + a['output_tokens'] + ci + co:,}")
+    print(f"TOTAL:              input={a['input_tokens']:,}  "
+          f"output={a['output_tokens']:,}  "
+          f"grand_total={a['input_tokens'] + a['output_tokens']:,}")
 
     per_iter = a.get("per_iter")
     if per_iter:
@@ -90,13 +87,9 @@ def render_single_agent(a: dict) -> None:
                 mo = p.get("model_out", p.get("out"))
                 to = p.get("tools_out", p.get("tool_out"))
                 t = f"/{to}" if to is not None else ""
-                return f"{mi}/{mo}{t}" + (" [C]" if p.get("compacted") else "")
+                return f"{mi}/{mo}{t}"
             return f"{p[0]}/{p[1]}"  # legacy [in, out] format
-        print("per-iteration model_in/model_out/tools_out ([C]=compaction fired): " + " → ".join(_fmt(p) for p in per_iter))
-        if any(isinstance(p, dict) and "middle" in p for p in per_iter):
-            print("compactable-middle tokens (the sawtooth, vs threshold): " +
-                  " → ".join(f"{p['middle']}" + ("[C]" if p.get("compacted") else "")
-                             for p in per_iter if isinstance(p, dict)))
+        print("per-iteration model_in/model_out/tools_out: " + " → ".join(_fmt(p) for p in per_iter))
 
     r = a.get("reasoning")
     if r:
@@ -117,7 +110,7 @@ def render_single_agent(a: dict) -> None:
 def render_multi_agent(agents: list) -> None:
     """Render usage for a multi-agent run (Episode 6): a block per worker, then
     an aggregate across all workers."""
-    tot = dict(input=0, output=0, cache_w=0, cache_r=0, compact_in=0, compact_out=0)
+    tot = dict(input=0, output=0, cache_w=0, cache_r=0)
     print("\n=== PER-WORKER METRICS ===")
     for a in agents:
         print(f"\n[{a['label']}]")
@@ -125,9 +118,6 @@ def render_multi_agent(agents: list) -> None:
         print(f"  tokens:         in={a['input_tokens']:,}  out={a['output_tokens']:,}")
         if "cache_write" in a or "cache_read" in a:
             print(f"  cache:          write={a.get('cache_write', 0):,}  read={a.get('cache_read', 0):,}")
-        if "compactions" in a:
-            print(f"  compactions:    {a['compactions']} "
-                  f"(summarizer in={a.get('compact_in', 0):,} out={a.get('compact_out', 0):,})")
         r = a.get("reasoning")
         if r:
             print(f"  reasoning:      plan_writes={r.get('write_plan', 0)}  think={r.get('think', 0)}")
@@ -143,8 +133,6 @@ def render_multi_agent(agents: list) -> None:
         tot["output"] += a["output_tokens"]
         tot["cache_w"] += a.get("cache_write", 0)
         tot["cache_r"] += a.get("cache_read", 0)
-        tot["compact_in"] += a.get("compact_in", 0)
-        tot["compact_out"] += a.get("compact_out", 0)
 
     print("\n=== AGGREGATE ACROSS ALL WORKERS ===")
     print(f"workers spawned:    {len(agents)}")
@@ -152,8 +140,7 @@ def render_multi_agent(agents: list) -> None:
     print(f"total output:       {tot['output']:,}")
     print(f"total cache write:  {tot['cache_w']:,}")
     print(f"total cache read:   {tot['cache_r']:,}")
-    print(f"summarizer in/out:  {tot['compact_in']:,} / {tot['compact_out']:,}")
-    grand = tot["input"] + tot["output"] + tot["compact_in"] + tot["compact_out"]
+    grand = tot["input"] + tot["output"]
     print(f"grand total tokens: {grand:,}")
 
 
