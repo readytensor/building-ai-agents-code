@@ -16,7 +16,7 @@ building-ai-agents-code/
 │   │   ├── system_prompt.md   # the agent's system prompt (shared core across episodes)
 │   │   ├── initial/           # pristine starting copy of the md2html project
 │   │   └── sandbox/           # where the agent works (recreated every run)
-│   ├── 04-tools/  05-skills/  06-subagents/   (03-compaction/ and 04-working-memory/: earlier plan, to be removed)
+│   ├── 04-tools/  05-skills/  06-subagents/
 ├── examples/             # the FINISHED md2html (every feature) + a sample doc that uses them all
 ├── eval/                 # evaluation harness (SWE-bench Verified + the episode tasks)
 ├── run.py                # optional harness to record a run
@@ -30,16 +30,16 @@ Each episode is **self-contained**: `cd` into it and run `python agent.py`. Epis
 diff episodes/03-loop/agent.py episodes/04-tools/agent.py   # what one idea added
 ```
 
-`agent.py` is always the entry point. The early episodes are a single file; as the agent grows, later episodes split the supporting pieces into a few small modules next to it (`tools.py`, `compaction.py`, `planning.py`, `skills.py`), so `agent.py` stays focused on the loop.
+`agent.py` is always the entry point. The early episodes are a single file; as the agent grows, later episodes split the supporting pieces into a few small modules next to it (`tools.py`, `skills.py`), so `agent.py` stays focused on the loop.
 
 ## Ground rules when working here
 
 - **Never modify `initial/`.** It is the pristine template the agent starts from. Every `agent.py` begins by wiping `sandbox/` and copying `initial/` into it, so each run starts from an identical clean state. If you change `initial/`, you change the experiment.
 - **`sandbox/` is ephemeral.** It is recreated on every run and is gitignored. Don't keep anything there you care about, and don't be surprised when it resets.
-- **Stay inside one episode.** A change for Episode 3 belongs in `episodes/03-compaction/`. Don't edit one episode's files to fix another, and don't let one episode's `agent.py` reach into another's directory.
+- **Stay inside one episode.** A change for the Tools episode belongs in `episodes/04-tools/`. Don't edit one episode's files to fix another, and don't let one episode's `agent.py` reach into another's directory.
 - **The diff between episodes is the lesson.** When you add or change something, keep the *delta* from the previous episode small and legible: that delta is the teaching point, not just the end state.
 - **`bash` is not sandboxed.** The file tools are contained to `sandbox/`, but `bash` only *starts* there; it runs with the user's full permissions. See "A note on safety" in [`README.md`](./README.md) before pointing the agent at anything beyond the scripted episode tasks.
-- **The system prompt is one shared artifact.** Every episode's `system_prompt.md` carries the same core text; later episodes add only the section for the mechanism they introduce, and `eval/system_prompt.md` matches Episode 5 exactly. Never edit one copy alone: change all of them together (a drift test in `eval/tests/` fails otherwise).
+- **The system prompt is one shared artifact.** Every episode's `system_prompt.md` carries the same core text; later episodes add only the section for the mechanism they introduce, and `eval/system_prompt.md` matches `05-skills` exactly. Never edit one copy alone: change all of them together (a drift test in `eval/tests/` fails otherwise).
 
 ## Verify your work
 
@@ -68,4 +68,4 @@ This is a **teaching repository**. The code is the artifact students learn from,
 
 ## Out of scope
 
-This series is about the architectural core of how agents work: the loop, tools, context management, planning, skills, and multi-agent topology. Production ops, durable execution, full guardrails, framework reviews, and model training/RL are each their own topic and deliberately left out. Don't pull them in.
+This series is about the architectural core of how agents work: the loop, tools, skills, subagents, and verifying the agent's work. Production ops, durable execution, full guardrails, framework reviews, and model training/RL are each their own topic and deliberately left out. Don't pull them in.

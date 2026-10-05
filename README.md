@@ -28,7 +28,7 @@ The videos are numbered straight through, in three parts.
 Each episode in "Building the agent" follows the same rhythm: one question, one limitation, one addition in code, one before/after.
 
 > [!NOTE]
-> The code is being updated to this arc one episode at a time. `03-loop` and `04-tools` already carry their video numbers. `03-compaction` and `04-working-memory` are from an earlier plan and will be removed, and `05-skills` and `06-subagents` still include that plan's compaction and planning code until their episodes are updated.
+> The code is being updated to this arc one episode at a time, so some folders in `episodes/` are still from an earlier version of the series.
 
 ## A note on safety
 
@@ -72,8 +72,6 @@ building-ai-agents-code/
 │   │   ├── initial/           # pristine starting copy of the example project
 │   │   └── sandbox/           # where the agent works (recreated every run)
 │   ├── 04-tools/              # + tools.py (each later episode adds one file per mechanism)
-│   ├── 03-compaction/         # earlier plan, to be removed: + compaction.py, held_out/ + grade.py
-│   ├── 04-working-memory/     # earlier plan, to be removed: + planning.py
 │   ├── 05-skills/             # + skills.py and a .skills/ library
 │   └── 06-subagents/          # + .agents/ worker configs
 ├── examples/
@@ -94,7 +92,7 @@ Each `agent.py` is also **importable**: the loop lives in `run_agent(client, mod
 from agent import run_agent, make_client, SYSTEM, TOOLS
 ```
 
-**`system_prompt.md`.** Each episode's system prompt is a markdown file next to `agent.py`, loaded in one line. The prompt shares a common core across every episode; later episodes add only the section for the mechanism they introduce (a plan section in Episode 4, a skills section in Episode 5). Diff two of them to see exactly what an episode taught the agent.
+**`system_prompt.md`.** Each episode's system prompt is a markdown file next to `agent.py`, loaded in one line. The prompt shares a common core across every episode; later episodes add only the section for the mechanism they introduce (Skills adds a skills section, for example). Diff two of them to see exactly what an episode taught the agent.
 
 **`eval/`.** A separate harness that runs the finished agent against real problems: SWE-bench Verified instances (with official Docker grading) and the series' own episode tasks. See [`eval/README.md`](./eval/README.md).
 
@@ -117,22 +115,9 @@ diff episodes/03-loop/agent.py episodes/04-tools/agent.py
 ```bash
 python run.py --cwd episodes/03-loop            # into logs/<timestamp>/
 python run.py --cwd episodes/03-loop --capture  # also the terminal output
-python run.py --cwd episodes/03-compaction --capture -g   # and grade the run afterwards (see below)
 ```
 
 Each run gets its own timestamped folder under the episode's `logs/`, so you can run the same task repeatedly and compare how the agent's path and tool-call count vary from run to run. `capture.py` is the underlying terminal recorder and also works standalone on any command (e.g. `python capture.py -- pytest -q`).
-
-## Grading a run
-
-The agent verifies its own work with what it can see: the failing fixture, the tests it writes, the project's suite. Grading is a different act: judging the finished run against **held-out tests the agent never saw**. The `03-compaction` folder introduces the pattern with a `held_out/` folder at the episode root (never copied into the sandbox) and a small `grade.py` that injects those tests after a run and re-runs the suite:
-
-```bash
-cd episodes/03-compaction
-python agent.py     # the run
-python grade.py     # the judgment: GRADE: PASS / FAIL
-```
-
-Or in one step with the harness: `python run.py -g`, which also saves the verdict as `grade.log` in the run's folder. A run that passes everything the agent could see but fails the held-out tests fit the examples it was given without implementing the rule behind them. That distinction (the agent verifies, the harness grades) comes back in `05-skills` and `06-subagents`, and at full scale in `eval/`.
 
 ## The example project: `md2html`
 
