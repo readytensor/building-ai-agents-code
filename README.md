@@ -49,7 +49,7 @@ Set up a virtual environment and install the dependencies (Python 3.11+):
 python -m venv venv
 source venv/bin/activate       # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env           # add your OPENAI_API_KEY
+cp .env.example .env           # then add your provider's API key
 ```
 
 Using `uv`? `uv venv && uv pip install -r requirements.txt`.
@@ -115,8 +115,8 @@ diff episodes/03-loop/agent.py episodes/04-tools/agent.py
 `python agent.py` runs the agent on its own. If you want to capture what happened (to compare runs or inspect the agent's path), use the `run.py` harness instead (from the repo root):
 
 ```bash
-python run.py --cwd episodes/03-loop            # record the tool-call sequence to logs/<timestamp>/
-python run.py --cwd episodes/03-loop --capture  # also save the full terminal output
+python run.py --cwd episodes/03-loop            # tool calls to logs/<timestamp>/
+python run.py --cwd episodes/03-loop --capture  # also the full terminal output
 python run.py --cwd episodes/03-compaction --capture -g   # and grade the run afterwards (see below)
 ```
 
