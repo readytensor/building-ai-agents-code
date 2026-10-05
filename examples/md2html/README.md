@@ -1,82 +1,86 @@
 # md2html
 
-A small Markdown-to-HTML CLI tool with a clean three-stage pipeline:
+md2html converts Markdown to HTML. It is a small Python package with a
+command-line tool, no runtime dependencies, and a three-stage pipeline:
 
 ```
-markdown text → lexer → tokens → parser → AST → renderer → HTML
+Markdown → lexer → tokens → parser → AST → renderer → HTML
 ```
-
-It implements a deliberately small but real subset of Markdown: ATX headings, paragraphs, ordered/unordered (and nested) lists, fenced code blocks, blockquotes, horizontal rules, and the usual inline constructs (emphasis, strong, inline code, links, images, hard breaks).
-
-Eight optional extensions ship in-tree:
-
-- **tables**: GitHub-flavored pipe tables with column alignment.
-- **code_blocks**: adds the `language-xxx` class on fenced code blocks.
-- **footnotes**: `[^1]` references plus collected definitions at the document end.
-- **reference_links**: `[text][id]` references resolved against `[id]: url "title"` definitions.
-- **github_alerts**: `> [!NOTE]` / `[!TIP]` / `[!WARNING]` etc. blockquotes rendered as alert boxes.
-- **strikethrough**: `~~text~~` rendered as `<del>`.
-- **task_lists**: `- [ ]` / `- [x]` list items rendered with disabled checkboxes.
-- **autolinks**: `<https://example.com>` rendered as a link.
 
 ## Install
 
-```
-pip install -e .[test]
-```
+md2html needs Python 3.11 or newer. From the project folder:
 
-## Use
-
-```
-md2html INPUT_FILE [-o OUTPUT_FILE] [--stdout] [-s | --standalone]
-        [--no-extensions] [--extensions LIST]
+```sh
+pip install -e ".[test]"
 ```
 
-Examples:
+This installs the `md2html` command, and pytest for the test suite.
 
-```
-md2html README.md                       # writes README.html (HTML body fragment)
-md2html README.md --standalone          # writes a complete standalone HTML page
-md2html README.md --stdout              # prints to stdout
-md2html post.md --extensions tables     # tables only
-md2html post.md --no-extensions         # core markdown only
-```
+## Command line
 
-By default `md2html` emits an HTML body fragment (the usual contract for a Markdown converter); `--standalone` (`-s`) wraps it in a complete HTML document with a built-in stylesheet, ready to open in a browser.
-
-Or invoke as a module:
-
-```
-python -m md2html README.md --stdout
+```sh
+md2html notes.md                      # writes notes.html next to the input
+md2html notes.md -o page.html         # writes to a file you name
+md2html notes.md --stdout             # prints the HTML instead
+md2html notes.md --standalone         # a complete page with a built-in stylesheet
 ```
 
-## Library use
+Without `--standalone`, the output is an HTML fragment for the page body.
+With it, the fragment is wrapped in a full HTML document; the page title
+comes from the first `#` heading, or from the file name if there is none.
+`python -m md2html` works the same as the `md2html` command.
+
+## In Python
 
 ```python
 from md2html import render
 
-html = render(open("README.md").read())
+render("# Hello\n\nSome *Markdown*.")
+# '<h1>Hello</h1>\n<p>Some <em>Markdown</em>.</p>'
 ```
 
-## Architecture
+## What it supports
 
-| Module | Responsibility |
+Headings (`#` to `######`), paragraphs, ordered and unordered lists
+(nested by indentation), blockquotes (which can contain other blocks),
+fenced code blocks, horizontal rules, and inline emphasis, strong text,
+code spans, links, images and hard line breaks.
+
+Eight extensions are on by default:
+
+- **tables**: GitHub-style pipe tables, with column alignment.
+- **code_blocks**: a `language-…` class on fenced code blocks.
+- **footnotes**: `[^1]` references, with the notes collected at the end.
+- **reference_links**: `[text][id]` links, resolved against `[id]: url "title"` lines.
+- **github_alerts**: `> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]` and `[!CAUTION]` blockquotes, rendered as GitHub's alert boxes.
+- **strikethrough**: `~~text~~` becomes `<del>text</del>`.
+- **task_lists**: `- [ ]` and `- [x]` list items get a checkbox.
+- **autolinks**: `<https://example.com>` becomes a link.
+
+Turn them off with `--no-extensions`, or pick some with
+`--extensions tables,footnotes` (in Python: `render(text, extensions="tables")`).
+
+Not supported: raw HTML pass-through, setext (underlined) headings, and
+indented code blocks.
+
+## How it works
+
+| Module | What it does |
 |---|---|
-| `md2html/lexer.py` | Scan markdown text into a flat stream of block-level tokens. |
-| `md2html/parser.py` | Build an AST from the token stream; do inline parsing. |
-| `md2html/renderer.py` | Visitor-pattern walker producing HTML. |
-| `md2html/extensions/` | Each extension is one file contributing to all three stages. |
-| `md2html/utils.py` | HTML-escape, slugify, whitespace helpers. |
-| `md2html/cli.py` | argparse entry point. |
+| `md2html/lexer.py` | Splits the text into a flat stream of block-level tokens. |
+| `md2html/parser.py` | Builds the tree of nodes (the AST) and parses inline syntax. |
+| `md2html/renderer.py` | Walks the tree and writes HTML. |
+| `md2html/extensions/` | One file per extension; an extension can hook into any of the three stages. |
+| `md2html/cli.py` | The command-line tool. |
+| `md2html/utils.py` | Small helpers: HTML escaping, slugs, whitespace. |
 
 ## Tests
 
-```
+```sh
 pytest
 ```
 
-Tests cover the lexer, the parser, and end-to-end fixture pairs under `tests/fixtures/` (one `*.md` input and one `*.html` expected output per case).
-
-## Scope
-
-This is intentionally a teaching codebase, not a production Markdown engine. The following are **out of scope** by design: HTML pass-through, setext headings, indented code blocks, and math.
+There are unit tests for the lexer and the parser, and end-to-end tests
+built from pairs of files in `tests/fixtures/`: each `name.md` is rendered
+and compared with `name.html`. To add a case, add a new pair.
