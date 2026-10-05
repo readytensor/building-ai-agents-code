@@ -1,5 +1,5 @@
 """
-Episode 1 — The Loop
+The Loop
 
 Minimal agent: a while-loop calling a single `bash` tool until the model stops
 requesting tool calls. Naive stop condition.

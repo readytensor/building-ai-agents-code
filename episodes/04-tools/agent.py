@@ -1,5 +1,5 @@
 """
-Episode 2 — Tools
+Tools
 
 Adds general primitives (list_files, read, write, edit, grep) alongside bash,
 plus a tiny @tool decorator that builds each tool's JSON-schema from its

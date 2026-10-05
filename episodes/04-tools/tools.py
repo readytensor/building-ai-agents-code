@@ -1,5 +1,5 @@
 """
-Episode 2 — Tools
+Tools
 
 The agent's action space: six general primitives (bash, list_files, read,
 write, edit, grep) plus a tiny @tool decorator (~25 lines) that builds each
