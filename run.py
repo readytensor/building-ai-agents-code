@@ -14,7 +14,7 @@ The episodes stay self-contained — `python agent.py` still works on its own.
 run.py is just the outer harness; it can run any episode.
 
     python ../../run.py                       # run agent.py in the current folder
-    python run.py --cwd episodes/01-loop       # run a specific episode from the repo root
+    python run.py --cwd episodes/03-loop       # run a specific episode from the repo root
     python ../../run.py --capture             # also record terminal output
 """
 import argparse

@@ -1,8 +1,8 @@
-# Building Agents from First Principles
+# Building AI Agents
 
-Build a working coding agent from scratch: from a plain `while` loop with a single tool, all the way to multi-agent orchestration. No frameworks: just Python and a model API.
+Build a working coding agent from scratch: from a plain `while` loop with a single tool to skills, subagents, and checks the work must pass before the agent may stop, and then test it on a public benchmark. No frameworks: just Python and a model API.
 
-This is the companion code for the **"Agents from First Principles"** video series by Clyep. Each episode adds one idea, in code, on top of the last, and the diff between one episode and the next is the lesson.
+This is the companion code for the **Building AI Agents** video series. Each episode adds one idea, in code, on top of the last, and the diff between one episode and the next is the lesson.
 
 ## Who this is for
 
@@ -12,61 +12,37 @@ The worked example is a **coding agent**, the cleanest domain to learn in: a tig
 
 ## The series
 
-| #   | Episode             | The question                                 | What you build                                                                  |
-| --- | ------------------- | -------------------------------------------- | ------------------------------------------------------------------------------- |
-| 1   | The Loop            | What is an agent?                            | A minimal agent: a `while` loop + one `bash` tool                               |
-| 2   | Tools               | How does it actually do things?              | General primitives (`read` / `write` / `edit` / `grep`) + a tiny `@tool` helper |
-| 3   | Compaction          | Why does it get worse on long tasks?         | Rolling-summary compaction to keep long runs affordable                         |
-| 4   | Working Memory      | How does a long task stay on track?          | `write_plan` kept in durable agent state that survives compaction               |
-| 5   | Skills              | How does it reach beyond its fixed toolkit?  | A lazy-loaded skills system (`list_skills` / `load_skill` + `SKILL.md`)         |
-| 6   | Subagents           | When is one agent the wrong shape?           | `delegate` + worker configs + parallel multi-agent dispatch                     |
+The videos are numbered straight through, in three parts.
 
-Each episode follows the same rhythm: one question, one limitation, one addition in code, one before/after.
+| #   | Part               | Episode         | The question                                  | What the agent gains                                                                  |
+| --- | ------------------ | --------------- | --------------------------------------------- | ------------------------------------------------------------------------------------- |
+| 01  | Getting started    | Series Overview | What will we build?                           | Nothing yet: the loop, the project, and the plan                                      |
+| 02  | Getting started    | Project Setup   | How do I run it?                              | Nothing yet: the repository, and how to run the code                                  |
+| 03  | Building the agent | The Loop        | What is an agent?                             | A `while` loop and one `bash` tool                                                    |
+| 04  | Building the agent | Tools           | How does it actually do things?               | General tools (`read`, `write`, `edit`, `grep`, `list_files`) and a small `@tool` helper |
+| 05  | Building the agent | Skills          | How does it reach beyond its fixed toolkit?   | Capabilities loaded only when needed (`list_skills`, `load_skill`, `SKILL.md`)       |
+| 06  | Building the agent | Subagents       | When is one agent not enough?                 | `delegate`, worker configs, and parallel workers, each with its own context           |
+| 07  | Building the agent | Verification    | How do we know the work is finished and good? | A completion gate at the stop, and grading outside the loop                           |
+| 08+ | The benchmark      | Setup, then results | Does it hold up on real code?             | The same agent on SWE-bench Verified (`eval/`)                                        |
 
-## A note on safety
+Each episode in "Building the agent" follows the same rhythm: one question, one limitation, one addition in code, one before/after.
 
-The agent runs real shell commands with your user account's permissions. The file tools (`read`, `write`, `edit`, `grep`, `list_files`) are restricted to the `sandbox/` folder and cannot escape it, but `bash` is not: the sandbox is only its starting directory, and nothing prevents a command from using `cd ..` or an absolute path. The model decides what commands to run, so treat every run as untrusted.
-
-Following along with the episode tasks as written is low risk, and that is how we run it. If you point the agent at your own tasks, your own repositories, or open-ended experiments, run it inside a Docker container or a throwaway VM, not directly on a machine you care about. Real agent products solve this with OS-level sandboxes and containers; that layer is out of scope for this series on purpose.
-
-## Quickstart
-
-```bash
-git clone https://github.com/readytensor/building-ai-agents-code
-cd building-ai-agents-code
-```
-
-Set up a virtual environment and install the dependencies (Python 3.11+):
-
-```bash
-python -m venv venv
-source venv/bin/activate       # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-cp .env.example .env           # add your OPENAI_API_KEY
-```
-
-Using `uv`? `uv venv && uv pip install -r requirements.txt`.
-
-Run an episode:
-
-```bash
-cd episodes/01-loop
-python agent.py
-```
+> [!NOTE]
+> The code is being updated to this arc one episode at a time. `03-loop` and `04-tools` already carry their video numbers. `03-compaction` and `04-working-memory` are from an earlier plan and will be removed, and `05-skills` and `06-subagents` still include that plan's compaction and planning code until their episodes are updated.
 
 ## How the code is organized
 
 ```
 building-ai-agents-code/
 ├── episodes/
-│   ├── 01-loop/
+│   ├── 03-loop/
 │   │   ├── agent.py           # the episode's agent: start here
 │   │   ├── system_prompt.md   # the agent's system prompt (prompt text is config, not code)
 │   │   ├── initial/           # pristine starting copy of the example project
 │   │   └── sandbox/           # where the agent works (recreated every run)
-│   ├── 02-tools/              # + tools.py (each later episode adds one file per mechanism)
-│   ├── 03-compaction/         # + compaction.py, and a grading layer: held_out/ + grade.py
-│   ├── 04-working-memory/     # + planning.py
+│   ├── 04-tools/              # + tools.py (each later episode adds one file per mechanism)
+│   ├── 03-compaction/         # earlier plan, to be removed: + compaction.py, held_out/ + grade.py
+│   ├── 04-working-memory/     # earlier plan, to be removed: + planning.py
 │   ├── 05-skills/             # + skills.py and a .skills/ library
 │   └── 06-subagents/          # + .agents/ worker configs
 ├── examples/
@@ -100,7 +76,7 @@ diff -r initial sandbox
 **The diff between episodes is the lesson.** Compare two agents to see exactly what each idea added:
 
 ```bash
-diff episodes/01-loop/agent.py episodes/02-tools/agent.py
+diff episodes/03-loop/agent.py episodes/04-tools/agent.py
 ```
 
 ## Recording a run (optional)
@@ -108,16 +84,16 @@ diff episodes/01-loop/agent.py episodes/02-tools/agent.py
 `python agent.py` runs the agent on its own. If you want to capture what happened (to compare runs or inspect the agent's path), use the `run.py` harness instead (from the repo root):
 
 ```bash
-python run.py --cwd episodes/01-loop            # record the tool-call sequence to logs/<timestamp>/
-python run.py --cwd episodes/01-loop --capture  # also save the full terminal output
+python run.py --cwd episodes/03-loop            # record the tool-call sequence to logs/<timestamp>/
+python run.py --cwd episodes/03-loop --capture  # also save the full terminal output
 python run.py --cwd episodes/03-compaction --capture -g   # and grade the run afterwards (see below)
 ```
 
 Each run gets its own timestamped folder under the episode's `logs/`, so you can run the same task repeatedly and compare how the agent's path and tool-call count vary from run to run. `capture.py` is the underlying terminal recorder and also works standalone on any command (e.g. `python capture.py -- pytest -q`).
 
-## Grading a run (Episode 3+)
+## Grading a run
 
-The agent verifies its own work with what it can see: the failing fixture, the tests it writes, the project's suite. Grading is a different act: judging the finished run against **held-out tests the agent never saw**. Episode 3 introduces the pattern with a `held_out/` folder at the episode root (never copied into the sandbox) and a small `grade.py` that injects those tests after a run and re-runs the suite:
+The agent verifies its own work with what it can see: the failing fixture, the tests it writes, the project's suite. Grading is a different act: judging the finished run against **held-out tests the agent never saw**. The `03-compaction` folder introduces the pattern with a `held_out/` folder at the episode root (never copied into the sandbox) and a small `grade.py` that injects those tests after a run and re-runs the suite:
 
 ```bash
 cd episodes/03-compaction
@@ -125,7 +101,7 @@ python agent.py     # the run
 python grade.py     # the judgment: GRADE: PASS / FAIL
 ```
 
-Or in one step with the harness: `python run.py -g`, which also saves the verdict as `grade.log` in the run's folder. A run that passes everything the agent could see but fails the held-out tests fit the examples it was given without implementing the rule behind them. That distinction (the agent verifies, the harness grades) comes back in Episodes 5 and 6, and at full scale in `eval/`.
+Or in one step with the harness: `python run.py -g`, which also saves the verdict as `grade.log` in the run's folder. A run that passes everything the agent could see but fails the held-out tests fit the examples it was given without implementing the rule behind them. That distinction (the agent verifies, the harness grades) comes back in `05-skills` and `06-subagents`, and at full scale in `eval/`.
 
 ## The example project: `md2html`
 
@@ -146,7 +122,7 @@ The code uses the `openai` Python package against the **Chat Completions API**, 
 
 ## Scope
 
-This series is about the **architectural core** of how agents work: the loop, tools, context management, planning, skills, and multi-agent topology. Deliberately out of scope (each its own topic) are production ops, durable execution, full guardrails, framework reviews, and model training/RL.
+This series is about the **architectural core** of how agents work: the loop, tools, skills, subagents, and verifying the agent's work. Deliberately out of scope (each its own topic) are production ops, durable execution, full guardrails, framework reviews, and model training/RL.
 
 ## License
 

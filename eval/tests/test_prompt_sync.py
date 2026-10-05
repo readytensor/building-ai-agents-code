@@ -35,13 +35,13 @@ def test_eval_prompt_is_byte_identical_to_ep5():
 
 
 def test_early_episodes_share_the_same_core():
-    assert (_prompt("episodes/01-loop")
-            == _prompt("episodes/02-tools")
+    assert (_prompt("episodes/03-loop")
+            == _prompt("episodes/04-tools")
             == _prompt("episodes/03-compaction"))
 
 
 def test_later_episodes_only_add_their_mechanism_section():
-    core = _sections(_prompt("episodes/01-loop"))
+    core = _sections(_prompt("episodes/03-loop"))
     ep4 = _sections(_prompt("episodes/04-working-memory"))
     ep5 = _sections(_prompt("episodes/05-skills"))
     for header, body in core.items():
@@ -57,6 +57,6 @@ def test_preamble_is_common():
     # The identity/task preamble (before the first ## section) must be
     # identical everywhere. The closing text rides inside the last section's
     # body, so the section comparison above already covers it.
-    core = _sections(_prompt("episodes/01-loop"))[""]
+    core = _sections(_prompt("episodes/03-loop"))[""]
     assert _sections(_prompt("episodes/04-working-memory"))[""] == core
     assert _sections(_prompt("episodes/05-skills"))[""] == core
