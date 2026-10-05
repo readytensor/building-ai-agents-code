@@ -139,21 +139,21 @@ TOOLS = [BASH_TOOL]
 # The system prompt lives in system_prompt.md next to this file: prompt text is
 # configuration, not loop logic. Its core is shared verbatim by every episode.
 SYSTEM = (Path(__file__).parent / "system_prompt.md").read_text(encoding="utf-8")
-# Two tasks for the same agent. The agent is identical; only this string changes.
-# The first asks it to summarize the project; the second asks it to write a README.
-# To try the second, comment out the first TASK and uncomment the second.
-TASK = (  # summarize the project
-    "This project has no README. Explore the codebase in the current directory "
-    "and tell me what it does: its purpose, how to use it, and how it's "
-    "structured, in 100-150 words. Base it on what you actually find in the "
-    "code; don't guess."
-)
-# TASK = (  # write the README
-#     "This project has no README. Explore the codebase in the current directory "
-#     "and write a README.md for it. Cover: what the project does, how to install "
-#     "and use it (including the CLI), its architecture, and how to run the tests. "
-#     "Base everything on what you actually find in the code; don't guess."
-# )
+# The task: a real feature for md2html. The fixture pair in initial/tests/fixtures/
+# (toc.md, toc.html) shows the expected output and fails until the feature exists.
+TASK = """Our markdown documents are getting long and hard to navigate. Add a
+table-of-contents extension to md2html:
+
+- Every rendered heading gets an HTML id derived from its text; duplicate
+  heading texts get distinct ids (-1, -2, ...).
+- A line consisting of exactly [TOC] becomes a labeled, nested list of links
+  to every heading. Without the marker: anchors only, no TOC.
+- Implement it as a new extension under md2html/extensions/, registered like
+  the existing ones.
+
+I've added a fixture pair at tests/fixtures/toc.md and tests/fixtures/toc.html
+showing the expected output; it currently fails. Make it pass, add your own
+tests, and make sure the existing tests still pass too."""
 
 # --- Tool-call telemetry: record every tool the agent invokes, in order, so
 # we can see the path it took and how many calls it made (this varies run to
