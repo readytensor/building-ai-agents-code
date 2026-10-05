@@ -115,8 +115,8 @@ diff episodes/03-loop/agent.py episodes/04-tools/agent.py
 `python agent.py` runs the agent on its own. If you want to capture what happened (to compare runs or inspect the agent's path), use the `run.py` harness instead (from the repo root):
 
 ```bash
-python run.py --cwd episodes/03-loop            # tool calls to logs/<timestamp>/
-python run.py --cwd episodes/03-loop --capture  # also the full terminal output
+python run.py --cwd episodes/03-loop            # into logs/<timestamp>/
+python run.py --cwd episodes/03-loop --capture  # also the terminal output
 python run.py --cwd episodes/03-compaction --capture -g   # and grade the run afterwards (see below)
 ```
 
