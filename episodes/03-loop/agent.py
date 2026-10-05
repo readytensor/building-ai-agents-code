@@ -131,8 +131,8 @@ BASH_TOOL = {
     },
 }
 
-# The tool list main() hands to run_agent — Ep 1 has exactly one tool. (Here
-# this is the raw schema list the API sees; from Ep 2 on, TOOLS holds
+# The tool list main() hands to run_agent: this episode has exactly one tool.
+# (Here this is the raw schema list the API sees; from 04-tools on, TOOLS holds
 # @tool-decorated functions and run_agent derives the schemas.)
 TOOLS = [BASH_TOOL]
 
@@ -209,7 +209,7 @@ def _count_tokens(messages):
 # --- 2. The agent loop, as a function. The signature is the anatomy of an
 # agent: a model, a system prompt, tools, and a task — give it those, get the
 # final answer. `tools` is the JSON-schema list sent to the API; with exactly
-# one tool this episode, dispatch below is hardwired to bash() (Ep 2
+# one tool this episode, dispatch below is hardwired to bash() (04-tools
 # generalizes it to dispatch by name).
 def run_agent(client, model: str, system: str, tools: list, task: str) -> str:
     """Run the agent loop on `task` until the model stops requesting tool
