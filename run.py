@@ -293,6 +293,14 @@ def main() -> int:
             shutil.move(str(produced), str(run_dir / name))
             print(f"[run] collected {name}", flush=True)
 
+    # Keep the sandbox as the agent left it, too: the next run wipes it, and the
+    # work itself (not only the log of making it) is what a comparison needs.
+    sandbox = cwd / "sandbox"
+    if sandbox.exists():
+        shutil.copytree(sandbox, run_dir / "sandbox",
+                        ignore=shutil.ignore_patterns("__pycache__", ".pytest_cache"))
+        print("[run] collected sandbox/", flush=True)
+
     # The harness — not the agent — renders the tool-call and usage summaries.
     # Rendered into a buffer so a captured run can also append them to its
     # terminal logs (they print after the capture window closes).
