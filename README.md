@@ -126,11 +126,11 @@ Each run gets its own timestamped folder under the episode's `logs/`, so you can
 After a run, the agent's version of md2html is in the episode's `sandbox/`. To try it on a real document, render one of the sample files in `examples/` with it (from the repo root):
 
 ```bash
-python render.py --cwd episodes/04-tools examples/emoji.md          # writes examples/emoji.html
-python render.py --cwd episodes/04-tools examples/emoji.md --open   # and opens it in a browser
+python render.py --cwd episodes/03-loop examples/toc.md
+python render.py --cwd episodes/03-loop examples/toc.md --open
 ```
 
-The page is written next to the Markdown file, as a complete page with md2html's built-in stylesheet. `render.py` runs md2html from inside the sandbox, so it always uses the agent's copy; an `md2html` command on your PATH would run whichever copy pip installed. Without `--cwd`, it uses the finished md2html in `examples/md2html/`.
+The first writes `examples/toc.html`; `--open` also opens it in a browser. Each episode has its own sample document (`toc.md` for 03, `emoji.md` for 04, …). The page is written next to the Markdown file, as a complete page with md2html's built-in stylesheet. `render.py` runs md2html from inside the sandbox, so it always uses the agent's copy; an `md2html` command on your PATH would run whichever copy pip installed. Without `--cwd`, it uses the finished md2html in `examples/md2html/`.
 
 ## The example project: `md2html`
 
