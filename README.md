@@ -76,9 +76,11 @@ building-ai-agents-code/
 │   └── 06-subagents/          # + .agents/ worker configs
 ├── examples/
 │   ├── md2html/             # the FINISHED tool (every feature) you build up to
-│   └── about-the-series.md  # a sample document that exercises every feature
+│   ├── about-the-series.md  # a sample document that exercises every feature
+│   └── toc.md, emoji.md     # one sample document per feature the agent builds
 ├── eval/                # evaluation harness: the agent on SWE-bench Verified + the episode tasks
 ├── run.py               # optional harness to record a run (see below)
+├── render.py            # render a Markdown file with an episode's md2html (see below)
 ├── capture.py           # terminal recorder used by run.py --capture
 ├── requirements.txt
 └── .env.example
@@ -118,6 +120,17 @@ python run.py --cwd episodes/03-loop --capture  # also the terminal output
 ```
 
 Each run gets its own timestamped folder under the episode's `logs/`, so you can run the same task repeatedly and compare how the agent's path and tool-call count vary from run to run. `capture.py` is the underlying terminal recorder and also works standalone on any command (e.g. `python capture.py -- pytest -q`).
+
+## Seeing what the agent built
+
+After a run, the agent's version of md2html is in the episode's `sandbox/`. To try it on a real document, render one of the sample files in `examples/` with it (from the repo root):
+
+```bash
+python render.py --cwd episodes/04-tools examples/emoji.md          # writes examples/emoji.html
+python render.py --cwd episodes/04-tools examples/emoji.md --open   # and opens it in a browser
+```
+
+The page is written next to the Markdown file, as a complete page with md2html's built-in stylesheet. `render.py` runs md2html from inside the sandbox, so it always uses the agent's copy; an `md2html` command on your PATH would run whichever copy pip installed. Without `--cwd`, it uses the finished md2html in `examples/md2html/`.
 
 ## The example project: `md2html`
 

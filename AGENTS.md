@@ -20,6 +20,7 @@ building-ai-agents-code/
 ├── examples/             # the FINISHED md2html (every feature) + a sample doc that uses them all
 ├── eval/                 # evaluation harness (SWE-bench Verified + the episode tasks)
 ├── run.py                # optional harness to record a run
+├── render.py             # render a Markdown file with an episode's md2html
 ├── capture.py            # terminal recorder used by run.py --capture
 └── requirements.txt
 ```

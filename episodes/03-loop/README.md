@@ -21,5 +21,11 @@ After a run, inspect what the agent did:
 diff -r initial sandbox
 ```
 
+Then try the new feature on a real document (from the repo root):
+
+```bash
+python render.py --cwd episodes/03-loop examples/toc.md --open
+```
+
 **Full context:**
 - `../../README.md`: companion code repo overview

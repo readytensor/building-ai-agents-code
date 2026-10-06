@@ -18,5 +18,11 @@
 python run.py --cwd episodes/04-tools
 ```
 
+Then try the new feature on a real document:
+
+```bash
+python render.py --cwd episodes/04-tools examples/emoji.md --open
+```
+
 **Full context:**
 - `../../README.md`: companion code repo overview
