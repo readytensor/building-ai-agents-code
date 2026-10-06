@@ -47,7 +47,8 @@ skills._SKILLS_DIR = _REPO_ROOT / "eval" / "skills"
 # Eval runs have their own model config so the shared LLM_* vars can keep
 # driving the episodes. Precedence: EVAL_LLM_* (from .env or inline) falls back
 # to the episodes' LLM_* if unset.
-MODEL = os.environ.get("EVAL_LLM_AGENT_MODEL") or os.environ.get("LLM_AGENT_MODEL", "deepseek/deepseek-v4-flash")
+MODEL = (os.environ.get("EVAL_LLM_AGENT_MODEL")
+         or os.environ.get("LLM_AGENT_MODEL", "deepseek/deepseek-v4-flash"))
 BASE_URL = os.environ.get("EVAL_LLM_BASE_URL") or os.environ.get("LLM_BASE_URL") or ""
 MAX_ITERATIONS = int(os.environ.get("MAX_ITERATIONS", 200))
 
@@ -75,7 +76,8 @@ ADVISOR_MAX_TOKENS = int(os.environ.get("ADVISOR_MAX_TOKENS", 50_000))
 #     to the newest ADVISOR_CONTEXT_MAX_TOKENS when it outgrows the advisor's
 #     own context window.
 ADVISOR_CONTEXT = os.environ.get("ADVISOR_CONTEXT", "view")
-ADVISOR_CONTEXT_MAX_TOKENS = int(os.environ.get("ADVISOR_CONTEXT_MAX_TOKENS", 150_000))
+ADVISOR_CONTEXT_MAX_TOKENS = int(
+    os.environ.get("ADVISOR_CONTEXT_MAX_TOKENS", 150_000))
 
 # The canonical transcript, appended to as the run goes -- so a sample that dies
 # mid-solve (disk exhaustion, an OOM'd worker, a killed batch) still leaves its
@@ -255,7 +257,8 @@ def _excerpt(text: str, edge: int = 300) -> str:
 def _call_tool(by_name, name, args):
     if container.ACTIVE and name in _IN_CONTAINER_TOOLS:
         # Same telemetry record the @tool wrapper writes on the host path.
-        tools.TOOL_CALLS.append({"round": tools.CURRENT_ROUND, "tool": name, "args": dict(args)})
+        tools.TOOL_CALLS.append({"round": tools.CURRENT_ROUND, "tool": name,
+                                 "args": dict(args)})
         result = container.fileop(container.ACTIVE, name, args)
     else:
         result = by_name[name](**args)
@@ -269,8 +272,9 @@ def _call_tool(by_name, name, args):
 
 def _client(base_url):
     def api_key_for(url):
-        by_provider = {"anthropic": "ANTHROPIC_API_KEY", "openrouter": "OPENROUTER_API_KEY",
-                       "groq": "GROQ_API_KEY", "googleapis": "GOOGLE_API_KEY", "manus": "MANUS_API_KEY"}
+        by_provider = {"anthropic": "ANTHROPIC_API_KEY",
+                       "openrouter": "OPENROUTER_API_KEY", "groq": "GROQ_API_KEY",
+                       "googleapis": "GOOGLE_API_KEY", "manus": "MANUS_API_KEY"}
         for fragment, key_var in by_provider.items():
             if fragment in url:
                 return os.environ.get(key_var)
@@ -350,7 +354,8 @@ def solve(repo_dir: Path, problem_statement: str, audit=None) -> str:
     record({"role": "user", "content": problem_statement})
     _ADVISOR_STATE.update({
         "history": history, "folds": folds,
-        "client": client if ADVISOR_BASE_URL == BASE_URL else _client(ADVISOR_BASE_URL),
+        "client": (client if ADVISOR_BASE_URL == BASE_URL
+                   else _client(ADVISOR_BASE_URL)),
         "in": 0, "out": 0,
     })
     iteration = 0
@@ -388,8 +393,8 @@ def solve(repo_dir: Path, problem_statement: str, audit=None) -> str:
             findings = audit() if audit else []
             if findings and audit_bounces < 1:
                 audit_bounces += 1
-                print(f"[iter {iteration}] [audit bounce: {len(findings)} finding(s)]",
-                      flush=True)
+                print(f"[iter {iteration}] [audit bounce: "
+                      f"{len(findings)} finding(s)]", flush=True)
                 record({"role": "user", "content": (
                     "AUDIT: your submission was checked before acceptance and "
                     "was not accepted:\n"
@@ -407,18 +412,22 @@ def solve(repo_dir: Path, problem_statement: str, audit=None) -> str:
                 # Live progress: one short line per tool call, so a background
                 # run can be followed with tail -f on its log.
                 preview = ", ".join(
-                    f"{k}={v!r}" if len(repr(v)) < 60 else f"{k}=<{len(str(v))} chars>"
+                    f"{k}={v!r}" if len(repr(v)) < 60
+                    else f"{k}=<{len(str(v))} chars>"
                     for k, v in args.items()
                 )
                 print(f"[iter {iteration}] {tc.function.name}({preview})", flush=True)
                 result = _call_tool(by_name, tc.function.name, args)
             except (TypeError, KeyError, json.JSONDecodeError, ValueError) as e:
-                result = f"Error executing {tc.function.name}: {type(e).__name__}: {e}"
+                result = (f"Error executing {tc.function.name}: "
+                          f"{type(e).__name__}: {e}")
                 print(f"[iter {iteration}] ! {result}", flush=True)
             record({"role": "tool", "tool_call_id": tc.id, "content": result})
         # compact() returns a summary and how much tail to keep; recording that
-        # as a fold is what shrinks the next view. The history is never rewritten.
-        summary_msg, tail_len, ci, co, _ = compact(build_view(history, folds), client, MODEL)
+        # as a fold is what shrinks the next view. The history is never
+        # rewritten.
+        summary_msg, tail_len, ci, co, _ = compact(
+            build_view(history, folds), client, MODEL)
         if summary_msg:
             fold = {"kind": "compaction",
                     "tail_start": len(history) - tail_len,
@@ -428,7 +437,8 @@ def solve(repo_dir: Path, problem_statement: str, audit=None) -> str:
             compactions += 1
             compact_in += ci
             compact_out += co
-            print(f"[iter {iteration}] [compaction fired: summarizer in={ci} out={co}]", flush=True)
+            print(f"[iter {iteration}] [compaction fired: "
+                  f"summarizer in={ci} out={co}]", flush=True)
 
     write_tool_telemetry()
     # The closing summary is the only place the agent states what it did and

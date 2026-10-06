@@ -104,4 +104,5 @@ def check_binary_files(diff: str) -> list:
 
 def run_checks(diff: str) -> list:
     """All findings for one captured patch; empty list = stop accepted."""
-    return check_empty(diff) + check_test_modifications(diff) + check_binary_files(diff)
+    return (check_empty(diff) + check_test_modifications(diff)
+            + check_binary_files(diff))

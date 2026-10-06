@@ -53,9 +53,11 @@ def run_grader(predictions: str, run_id: str, out_dir: Path, ids: list) -> None:
     pred_arg = predictions if predictions == "gold" else wsl_path(Path(predictions))
     cmd = ["wsl", "-d", _WSL_DISTRO, "--", "bash", wsl_path(_GRADE_SH),
            pred_arg, run_id, wsl_path(Path(out_dir)), *ids]
-    proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
+                          errors="replace")
     if proc.returncode != 0:
-        raise RuntimeError(f"grading failed (exit {proc.returncode}):\n{proc.stdout[-2000:]}\n{proc.stderr[-2000:]}")
+        raise RuntimeError(f"grading failed (exit {proc.returncode}):\n"
+                           f"{proc.stdout[-2000:]}\n{proc.stderr[-2000:]}")
 
 
 def write_predictions(batch_dir: Path, model_name: str) -> Path:
@@ -63,7 +65,8 @@ def write_predictions(batch_dir: Path, model_name: str) -> Path:
     attempts get -runN dir suffixes; the grader keys on instance_id)."""
     preds = []
     for d in sorted(Path(batch_dir).iterdir()):
-        if d.is_dir() and (d / "diff.patch").exists() and not _RUN_SUFFIX.search(d.name):
+        if (d.is_dir() and (d / "diff.patch").exists()
+                and not _RUN_SUFFIX.search(d.name)):
             preds.append({
                 "instance_id": d.name,
                 "model_name_or_path": model_name,
@@ -94,7 +97,8 @@ def env_corrected(agent: dict, gold: dict) -> bool:
 def _official_verdict(agent: dict, gold: dict) -> dict:
     """The official.json payload for one graded attempt."""
     return {
-        "resolved": env_corrected(agent, gold),  # env-corrected, the number that counts
+        # env-corrected, the number that counts
+        "resolved": env_corrected(agent, gold),
         "resolved_raw": agent["resolved_raw"],   # the grader's uncorrected verdict
         "f2p_ok": agent["f2p_ok"],
         "p2p_failures": agent["p2p_failures"],
@@ -136,7 +140,8 @@ def _gold_baselines(instance_ids: list, run_id: str, runner) -> dict:
     return baselines
 
 
-def grade_instance(inst_dir, model_name: str, run_id: str = None, runner=run_grader) -> dict:
+def grade_instance(inst_dir, model_name: str, run_id: str = None,
+                   runner=run_grader) -> dict:
     """Officially grade ONE finished attempt (inst_dir holds its diff.patch).
 
     This is the solve -> grade -> next-sample path (run_eval --grade): a broken
@@ -155,10 +160,12 @@ def grade_instance(inst_dir, model_name: str, run_id: str = None, runner=run_gra
     patch = (inst_dir / "diff.patch").read_text(encoding="utf-8")
     if not patch.strip():
         verdict = _empty_patch_verdict()
-        (inst_dir / "official.json").write_text(json.dumps(verdict, indent=2), encoding="utf-8")
+        (inst_dir / "official.json").write_text(json.dumps(verdict, indent=2),
+                                                encoding="utf-8")
         return verdict
 
-    pred = {"instance_id": iid, "model_name_or_path": model_name, "model_patch": patch}
+    pred = {"instance_id": iid, "model_name_or_path": model_name,
+            "model_patch": patch}
     predictions = inst_dir / "predictions.jsonl"
     predictions.write_text(json.dumps(pred) + "\n", encoding="utf-8")
 
@@ -166,16 +173,21 @@ def grade_instance(inst_dir, model_name: str, run_id: str = None, runner=run_gra
     reports_dir = inst_dir / "official_reports"
     runner(str(predictions), run_id, reports_dir, [iid])
 
-    verdict = _official_verdict(parse_report(reports_dir / f"{iid}.json", iid), gold[iid])
-    (inst_dir / "official.json").write_text(json.dumps(verdict, indent=2), encoding="utf-8")
+    verdict = _official_verdict(parse_report(reports_dir / f"{iid}.json", iid),
+                                gold[iid])
+    (inst_dir / "official.json").write_text(json.dumps(verdict, indent=2),
+                                            encoding="utf-8")
     return verdict
 
 
-def grade_batch(batch_dir, model_name: str, run_id: str = None, runner=run_grader) -> dict:
+def grade_batch(batch_dir, model_name: str, run_id: str = None,
+                runner=run_grader) -> dict:
     batch_dir = Path(batch_dir)
-    run_id = run_id or f"{batch_dir.name}-{time.strftime('%m%d%H%M%S')}".replace(".", "-")
+    run_id = run_id or (f"{batch_dir.name}-"
+                        f"{time.strftime('%m%d%H%M%S')}").replace(".", "-")
     predictions = write_predictions(batch_dir, model_name)
-    preds = [json.loads(line) for line in predictions.read_text(encoding="utf-8").splitlines()]
+    preds = [json.loads(line)
+             for line in predictions.read_text(encoding="utf-8").splitlines()]
     ids = [p["instance_id"] for p in preds]
     if not ids:
         raise SystemExit(f"no diff.patch files found under {batch_dir}")
@@ -193,7 +205,8 @@ def grade_batch(batch_dir, model_name: str, run_id: str = None, runner=run_grade
     resolved, unresolved = [], []
     for iid in ids:
         verdict = (_empty_patch_verdict() if iid in empty else
-                   _official_verdict(parse_report(reports_dir / f"{iid}.json", iid), gold[iid]))
+                   _official_verdict(parse_report(reports_dir / f"{iid}.json", iid),
+                                     gold[iid]))
         (resolved if verdict["resolved"] else unresolved).append(iid)
         (batch_dir / iid / "official.json").write_text(
             json.dumps(verdict, indent=2), encoding="utf-8")
@@ -203,7 +216,8 @@ def grade_batch(batch_dir, model_name: str, run_id: str = None, runner=run_grade
         "resolved": resolved, "unresolved": unresolved,
         "official_pass_at_1": round(len(resolved) / len(ids), 4),
     }
-    (batch_dir / "official_summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    (batch_dir / "official_summary.json").write_text(json.dumps(summary, indent=2),
+                                                     encoding="utf-8")
     append_scoreboard(batch_dir.parent, {
         "timestamp": batch_dir.name, "agent": "ep5", "model": model_name,
         "source": "swebench", "n": len(ids), "grading": "official-env-corrected",
@@ -213,9 +227,11 @@ def grade_batch(batch_dir, model_name: str, run_id: str = None, runner=run_grade
 
 
 def main(argv=None):
-    p = argparse.ArgumentParser(description="Officially grade an eval batch (WSL + Docker).")
+    p = argparse.ArgumentParser(
+        description="Officially grade an eval batch (WSL + Docker).")
     p.add_argument("batch_dir")
-    p.add_argument("--model-name", required=True, help="model_name_or_path for predictions.jsonl")
+    p.add_argument("--model-name", required=True,
+                   help="model_name_or_path for predictions.jsonl")
     p.add_argument("--run-id", default=None)
     args = p.parse_args(argv)
     summary = grade_batch(args.batch_dir, args.model_name, run_id=args.run_id)

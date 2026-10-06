@@ -37,7 +37,8 @@ def test_noop_solver_yields_a_failing_result(base_repo, tmp_path, solvers):
     assert (out / "calc__add" / "diff.patch").read_text() == ""
 
 
-def test_runner_collects_agent_telemetry_files(base_repo, tmp_path, solvers, monkeypatch):
+def test_runner_collects_agent_telemetry_files(base_repo, tmp_path, solvers,
+                                               monkeypatch):
     monkeypatch.chdir(tmp_path)  # telemetry lands in cwd; keep the test isolated
 
     def telemetry_solver(repo_dir, task, audit=None):
@@ -63,7 +64,8 @@ def test_runner_does_not_mutate_the_base_repo(base_repo, tmp_path, solvers):
     assert "return a - b" in (base_repo / "calc.py").read_text()
 
 
-def test_container_backed_instance_has_no_host_copy_and_captures_before_teardown(tmp_path):
+def test_container_backed_instance_has_no_host_copy_and_captures_before_teardown(
+        tmp_path):
     events = []
     inst = Instance(
         id="demo__demo-1", problem_statement="fix it", repo_dir=None,

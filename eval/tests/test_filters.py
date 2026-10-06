@@ -32,7 +32,8 @@ def test_repo_filter_is_substring_match():
 
 
 def test_filters_combine():
-    assert [i.id for i in filter_pool(POOL, difficulty="hard", repo="django")] == ["c", "d"]
+    assert [i.id for i in filter_pool(POOL, difficulty="hard", repo="django")] == [
+        "c", "d"]
     assert filter_pool(POOL, difficulty="easy", repo="django") == []
 
 

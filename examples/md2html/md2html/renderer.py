@@ -88,7 +88,8 @@ class HtmlRenderer:
         return f"<pre><code>{body}</code></pre>"
 
     def visit_blockquote(self, node: ASTNode) -> str:
-        inner = "\n".join(self.render_node(c) for c in node.children if c.kind != "document")
+        inner = "\n".join(self.render_node(c) for c in node.children
+                          if c.kind != "document")
         if not inner:
             inner = self.render_children(node)
         return f"<blockquote>{inner}</blockquote>"

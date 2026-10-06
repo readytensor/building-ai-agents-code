@@ -66,23 +66,29 @@ def build_parser() -> argparse.ArgumentParser:
 # self-contained (no external CSS to ship). GitHub-ish; also styles the alert
 # classes the github_alerts extension emits.
 _STYLE = """\
-body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-       line-height: 1.6; max-width: 720px; margin: 2rem auto; padding: 0 1.25rem; color: #1f2328; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica,
+              Arial, sans-serif;
+       line-height: 1.6; max-width: 720px; margin: 2rem auto; padding: 0 1.25rem;
+       color: #1f2328; }
 h1, h2, h3 { line-height: 1.25; margin-top: 1.8rem; }
 h1, h2 { border-bottom: 1px solid #d0d7de; padding-bottom: .3rem; }
 a { color: #0969da; }
-code { background: #eff1f3; padding: .15em .35em; border-radius: 4px; font-size: 90%; }
+code { background: #eff1f3; padding: .15em .35em; border-radius: 4px;
+       font-size: 90%; }
 pre { background: #f6f8fa; padding: 1rem; border-radius: 6px; overflow: auto; }
 pre code { background: none; padding: 0; font-size: 100%; }
-blockquote { margin: 1rem 0; padding: 0 1rem; color: #59636e; border-left: .25rem solid #d0d7de; }
+blockquote { margin: 1rem 0; padding: 0 1rem; color: #59636e;
+             border-left: .25rem solid #d0d7de; }
 table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
 th, td { border: 1px solid #d0d7de; padding: .4rem .6rem; text-align: left; }
 th { background: #f6f8fa; }
 hr { border: 0; border-top: 1px solid #d0d7de; margin: 2rem 0; }
 del { color: #59636e; }
-.markdown-alert { padding: .6rem 1rem; margin: 1rem 0; border-left: .25rem solid #d0d7de;
+.markdown-alert { padding: .6rem 1rem; margin: 1rem 0;
+                  border-left: .25rem solid #d0d7de;
                   border-radius: 6px; background: #f6f8fa; }
-.markdown-alert-title { font-weight: 600; margin: 0 0 .3rem; text-transform: capitalize; }
+.markdown-alert-title { font-weight: 600; margin: 0 0 .3rem;
+                        text-transform: capitalize; }
 .markdown-alert-note { border-left-color: #0969da; }
 .markdown-alert-tip { border-left-color: #1a7f37; }
 .markdown-alert-important { border-left-color: #8250df; }
@@ -153,7 +159,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     out_path = Path(args.output) if args.output else in_path.with_suffix(".html")
-    out_path.write_text(html + ("\n" if not html.endswith("\n") else ""), encoding="utf-8")
+    out_path.write_text(html + ("\n" if not html.endswith("\n") else ""),
+                        encoding="utf-8")
     return 0
 
 

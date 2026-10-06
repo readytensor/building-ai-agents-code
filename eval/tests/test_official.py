@@ -19,14 +19,18 @@ def test_parse_report_extracts_verdict_fields(tmp_path):
     p = tmp_path / "r.json"
     p.write_text(json.dumps(_report("x", [], ["t/a", "t/b"], False)))
     r = official.parse_report(p, "x")
-    assert r == {"resolved_raw": False, "f2p_ok": True, "p2p_failures": ["t/a", "t/b"]}
+    assert r == {"resolved_raw": False, "f2p_ok": True,
+                 "p2p_failures": ["t/a", "t/b"]}
 
 
 def test_env_corrected_verdict_against_gold():
     gold = {"f2p_ok": True, "p2p_failures": ["flaky1", "flaky2"]}
-    same_as_gold = {"resolved_raw": False, "f2p_ok": True, "p2p_failures": ["flaky1", "flaky2"]}
-    subset_of_gold = {"resolved_raw": False, "f2p_ok": True, "p2p_failures": ["flaky1"]}
-    real_regression = {"resolved_raw": False, "f2p_ok": True, "p2p_failures": ["flaky1", "broken"]}
+    same_as_gold = {"resolved_raw": False, "f2p_ok": True,
+                    "p2p_failures": ["flaky1", "flaky2"]}
+    subset_of_gold = {"resolved_raw": False, "f2p_ok": True,
+                      "p2p_failures": ["flaky1"]}
+    real_regression = {"resolved_raw": False, "f2p_ok": True,
+                       "p2p_failures": ["flaky1", "broken"]}
     f2p_broken = {"resolved_raw": False, "f2p_ok": False, "p2p_failures": []}
     assert official.env_corrected(same_as_gold, gold) is True
     assert official.env_corrected(subset_of_gold, gold) is True
@@ -36,7 +40,8 @@ def test_env_corrected_verdict_against_gold():
 
 def test_write_predictions_uses_first_attempt_only(tmp_path):
     batch = tmp_path / "batch"
-    for label, content in [("inst-1", "patch1"), ("inst-1-run2", "patch1b"), ("inst-2", "patch2")]:
+    for label, content in [("inst-1", "patch1"), ("inst-1-run2", "patch1b"),
+                           ("inst-2", "patch2")]:
         d = batch / label
         d.mkdir(parents=True)
         (d / "diff.patch").write_text(content)
@@ -47,7 +52,8 @@ def test_write_predictions_uses_first_attempt_only(tmp_path):
     assert all(p["model_name_or_path"] == "test-model" for p in preds)
 
 
-def test_grade_instance_empty_patch_is_unresolved_without_grading(tmp_path, monkeypatch):
+def test_grade_instance_empty_patch_is_unresolved_without_grading(tmp_path,
+                                                                  monkeypatch):
     monkeypatch.setattr(official, "GOLD_BASELINE_DIR", tmp_path / "gold_cache")
     inst = tmp_path / "batch" / "inst-1"
     inst.mkdir(parents=True)
@@ -82,7 +88,8 @@ def test_grade_batch_skips_empty_patches_but_verdicts_them(tmp_path, monkeypatch
     summary = official.grade_batch(batch, "m", runner=fake_runner)
     assert graded.count("inst-2") == 0  # empty patch never reaches the harness
     assert "inst-2" in summary["unresolved"]
-    assert json.loads((batch / "inst-2" / "official.json").read_text())["resolved"] is False
+    assert json.loads(
+        (batch / "inst-2" / "official.json").read_text())["resolved"] is False
 
 
 def test_grade_instance_grades_one_sample(tmp_path, monkeypatch):
@@ -95,7 +102,8 @@ def test_grade_instance_grades_one_sample(tmp_path, monkeypatch):
         out = Path(out_dir)
         out.mkdir(parents=True, exist_ok=True)
         for iid in ids:
-            (out / f"{iid}.json").write_text(json.dumps(_report(iid, [], ["flaky1"], False)))
+            (out / f"{iid}.json").write_text(
+                json.dumps(_report(iid, [], ["flaky1"], False)))
 
     verdict = official.grade_instance(inst, "test-model", runner=fake_runner)
     assert verdict["resolved"] is True  # same failures as gold -> env-corrected pass

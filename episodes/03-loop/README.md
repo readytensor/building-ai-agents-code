@@ -1,8 +1,10 @@
 # The Loop
 
-**Concept:** the minimal agent: a `while` loop calling a single tool until the model stops requesting tool calls.
+**Concept:** the minimal agent: a `while` loop calling a single tool until the model
+stops requesting tool calls.
 
-**This episode's additions:** the loop itself + one `bash` tool + naive stop condition.
+**This episode's additions:** the loop itself + one `bash` tool + naive stop
+condition.
 
 **Code:**
 - `agent.py`: the agent: the `bash` tool, the loop in `run_agent()`, and `main()`

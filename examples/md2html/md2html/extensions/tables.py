@@ -160,7 +160,8 @@ class TablesExtension:
         align = tok.attrs["align"]
 
         header_nodes = [
-            ASTNode("table_cell", children=parser._parse_inline(c), attrs={"header": True, "align": a})
+            ASTNode("table_cell", children=parser._parse_inline(c),
+                    attrs={"header": True, "align": a})
             for c, a in zip(header, align)
         ]
         row_nodes = []
@@ -202,10 +203,12 @@ class TablesExtension:
             return f"<{tag}{attr}>{content}</{tag}>"
 
         if node.kind == "table_row":
-            return "<tr>" + "".join(renderer.render_node(c) for c in node.children) + "</tr>"
+            return ("<tr>" + "".join(renderer.render_node(c) for c in node.children)
+                    + "</tr>")
 
         if node.kind == "table_header":
-            return "<tr>" + "".join(renderer.render_node(c) for c in node.children) + "</tr>"
+            return ("<tr>" + "".join(renderer.render_node(c) for c in node.children)
+                    + "</tr>")
 
         return None
 

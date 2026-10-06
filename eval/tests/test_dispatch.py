@@ -85,7 +85,8 @@ def test_worker_gets_own_cwd_and_repo_on_pythonpath(tmp_path):
     assert len(cwds) == 2  # one private cwd per worker, or telemetry collides
     repo_root = str(Path(dispatch.__file__).resolve().parents[1])
     for c in spawn_calls:
-        assert repo_root in c["env"]["PYTHONPATH"].split(";") + c["env"]["PYTHONPATH"].split(":")
+        assert repo_root in (c["env"]["PYTHONPATH"].split(";")
+                             + c["env"]["PYTHONPATH"].split(":"))
         assert "--id" in c["cmd"] and c["iid"] in c["cmd"]
         assert "--keep" in c["cmd"] and "all" in c["cmd"]
 
@@ -102,7 +103,8 @@ def test_skips_instances_already_complete(tmp_path):
 
 def test_consolidates_one_summary_and_one_scoreboard_row(tmp_path):
     ids = ["repo__a", "repo__b", "repo__c"]
-    procs = {"repo__b": FakeProc("repo__b", tmp_path / "results" / "batch", passed=False)}
+    procs = {"repo__b": FakeProc("repo__b", tmp_path / "results" / "batch",
+                                 passed=False)}
     result, _, _ = _run(tmp_path, ids, procs=procs)
 
     batch_dir = tmp_path / "results" / "batch"
@@ -110,7 +112,8 @@ def test_consolidates_one_summary_and_one_scoreboard_row(tmp_path):
     assert summary["aggregate"]["n_instances"] == 3
     assert summary["aggregate"]["pass_at_1"] == round(2 / 3, 4)
 
-    board = (tmp_path / "results" / "scoreboard.jsonl").read_text(encoding="utf-8").strip().splitlines()
+    board = ((tmp_path / "results" / "scoreboard.jsonl").read_text(encoding="utf-8")
+             .strip().splitlines())
     assert len(board) == 1
     row = json.loads(board[0])
     assert row["n"] == 3
@@ -121,14 +124,16 @@ def test_consolidates_one_summary_and_one_scoreboard_row(tmp_path):
 
 def test_worker_failure_is_reported_not_scored(tmp_path):
     ids = ["repo__ok", "repo__boom"]
-    procs = {"repo__boom": FakeProc("repo__boom", tmp_path / "results" / "batch", exit_code=3)}
+    procs = {"repo__boom": FakeProc("repo__boom", tmp_path / "results" / "batch",
+                                    exit_code=3)}
     result, _, _ = _run(tmp_path, ids, procs=procs)
 
     assert result["failed"] == ["repo__boom"]
     # The failed worker is excluded from the aggregate (an infra failure is
     # not an agent failure) and blocks the scoreboard row: rerunning the
     # dispatcher resumes the missing instance and appends the row then.
-    summary = json.loads((tmp_path / "results" / "batch" / "summary.json").read_text(encoding="utf-8"))
+    summary = json.loads((tmp_path / "results" / "batch" / "summary.json")
+                         .read_text(encoding="utf-8"))
     assert summary["aggregate"]["n_instances"] == 1
     assert not (tmp_path / "results" / "scoreboard.jsonl").exists()
     assert result["exit_code"] == 1

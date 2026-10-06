@@ -5,7 +5,8 @@ from eval.fake_agents import fixing_solver, git, noop_solver
 # A minimal "buggy" project: add() is wrong, so test_add fails (FAIL_TO_PASS);
 # test_mul passes and must stay passing (PASS_TO_PASS).
 BASE_FILES = {
-    "calc.py": "def add(a, b):\n    return a - b\n\n\ndef mul(a, b):\n    return a * b\n",
+    "calc.py": ("def add(a, b):\n    return a - b\n\n\n"
+                "def mul(a, b):\n    return a * b\n"),
     "test_math.py": (
         "from calc import add, mul\n\n\n"
         "def test_add():\n    assert add(2, 3) == 5\n\n\n"

@@ -52,7 +52,8 @@ def _free_gb(path: Path) -> float:
     return shutil.disk_usage(path).free / 1e9
 
 
-def _worker_cmd(iid: str, batch_dir: Path, source: str, agent: str, keep: str) -> list:
+def _worker_cmd(iid: str, batch_dir: Path, source: str, agent: str,
+                keep: str) -> list:
     return [sys.executable, "-m", "eval.run_eval",
             "--source", source, "--agent", agent, "--id", iid, "--n", "1",
             "--keep", keep, "--results-root", str(batch_dir.resolve()),
@@ -74,7 +75,8 @@ def _is_complete(batch_dir: Path, iid: str) -> bool:
 
 
 def _collect_result(batch_dir: Path, iid: str) -> dict:
-    summary = json.loads((batch_dir / iid / "summary.json").read_text(encoding="utf-8"))
+    summary = json.loads(
+        (batch_dir / iid / "summary.json").read_text(encoding="utf-8"))
     return summary["instances"][0]
 
 
@@ -122,7 +124,8 @@ def run_dispatch(ids: list, *, batch_dir: Path, results_root: Path,
             del running[iid]
             if code == 0 and _is_complete(batch_dir, iid):
                 passed = _collect_result(batch_dir, iid)["passed"]
-                print(f"[dispatch] {iid}: done -> {'PASS' if passed else 'fail'}", flush=True)
+                print(f"[dispatch] {iid}: done -> {'PASS' if passed else 'fail'}",
+                      flush=True)
                 done.append(iid)
             else:
                 failed.append(iid)
@@ -139,14 +142,15 @@ def run_dispatch(ids: list, *, batch_dir: Path, results_root: Path,
     # partial rate on the board would masquerade as a full run's number.
     # Disk-skipped instances make the batch just as incomplete as failed ones.
     if not failed and not skipped and results:
-        manifest = json.loads(
-            (batch_dir / results[0]["id"] / "manifest.json").read_text(encoding="utf-8"))
+        manifest = json.loads((batch_dir / results[0]["id"] / "manifest.json")
+                              .read_text(encoding="utf-8"))
         agg = aggregate(results, repeat=1)
         append_scoreboard(Path(results_root), {
             "timestamp": batch_dir.name, "agent": manifest["agent"],
             "model": manifest["model"], "source": source, "n": len(results),
             "repeat": 1, "seed": "-",
-            "grading": "official-env-corrected" if source == "swebench" else "local-pytest",
+            "grading": ("official-env-corrected" if source == "swebench"
+                        else "local-pytest"),
             "pass_at_1": agg["pass_at_1"], "pass_at_k": agg["pass_at_k"],
             "mean_seconds": agg["mean_seconds"], "batch_dir": str(batch_dir),
         })
@@ -156,7 +160,8 @@ def run_dispatch(ids: list, *, batch_dir: Path, results_root: Path,
 
 
 def main(argv=None):
-    p = argparse.ArgumentParser(description="Run eval instances in parallel worker processes.")
+    p = argparse.ArgumentParser(
+        description="Run eval instances in parallel worker processes.")
     p.add_argument("--batch", required=True, help="batch name under --results-root")
     p.add_argument("--ids", nargs="+", required=True)
     p.add_argument("--workers", type=int, default=3)
@@ -172,7 +177,8 @@ def main(argv=None):
     out = run_dispatch(args.ids, batch_dir=results_root / args.batch,
                        results_root=results_root, source=args.source,
                        agent=args.agent, keep=args.keep, workers=args.workers)
-    agg = aggregate(out["results"], repeat=1) if out["results"] else {"pass_at_1": 0.0}
+    agg = (aggregate(out["results"], repeat=1) if out["results"]
+           else {"pass_at_1": 0.0})
     print(f"[dispatch] complete: {len(out['results'])}/{len(args.ids)} instances, "
           f"pass@1={agg['pass_at_1']:.1%}, {len(out['failed'])} worker failures, "
           f"{len(out['skipped'])} skipped (disk)", flush=True)

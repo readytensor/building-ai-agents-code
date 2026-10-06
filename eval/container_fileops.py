@@ -68,9 +68,11 @@ def read(root: Path, path: str, offset: int = 1, limit: int = 0) -> str:
     end = start + limit if limit > 0 else len(numbered)
     selected = numbered[start:end]
     if not selected:
-        return f"Error: {path} has {len(lines)} lines; offset {offset} is past the end."
+        return (f"Error: {path} has {len(lines)} lines; "
+                f"offset {offset} is past the end.")
     if len(selected) < len(lines):
-        selected.append(f"(showing lines {start + 1}-{start + len(selected)} of {len(lines)})")
+        selected.append(f"(showing lines {start + 1}-{start + len(selected)} "
+                        f"of {len(lines)})")
     return "\n".join(selected)
 
 
@@ -81,7 +83,8 @@ def write(root: Path, path: str, content: str) -> str:
     return f"Wrote {len(content)} bytes to {path}."
 
 
-def edit(root: Path, path: str, old_string: str, new_string: str, replace_all: bool = False) -> str:
+def edit(root: Path, path: str, old_string: str, new_string: str,
+         replace_all: bool = False) -> str:
     p = _safe_path(root, path)
     if not p.exists():
         return f"Error: {path} does not exist."
@@ -92,7 +95,9 @@ def edit(root: Path, path: str, old_string: str, new_string: str, replace_all: b
     if count == 0:
         return f"Error: old_string not found in {path}."
     if count > 1 and not replace_all:
-        return f"Error: old_string appears {count} times in {path}; pass replace_all=true to replace all, or add more context to make it unique."
+        return (f"Error: old_string appears {count} times in {path}; "
+                "pass replace_all=true to replace all, "
+                "or add more context to make it unique.")
     p.write_text(text.replace(old_string, new_string), encoding="utf-8")
     return f"Replaced {count} occurrence(s) in {path}."
 
@@ -258,7 +263,8 @@ def _map_overview(rootr: Path) -> str:
     if runner:
         lines.append("Test/build config found: " + ", ".join(runner))
     lines.append("")
-    lines.append("Package tree (directories with Python modules; one-liners from __init__.py):")
+    lines.append("Package tree (directories with Python modules; "
+                 "one-liners from __init__.py):")
     entries = _mapped_dirs(rootr)
     test_dirs = [str(d.relative_to(rootr)).replace("\\", "/") for d, _ in entries
                  if d.name.startswith("test") or (d / "conftest.py").exists()]

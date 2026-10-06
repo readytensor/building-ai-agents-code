@@ -99,8 +99,10 @@ def test_held_out_tests_fail_on_unchanged_base(tmp_path):
 
 def test_ids_must_be_unique():
     specs = [
-        {"id": "dup", "problem_statement": "", "fail_to_pass": [], "pass_to_pass": []},
-        {"id": "dup", "problem_statement": "", "fail_to_pass": [], "pass_to_pass": []},
+        {"id": "dup", "problem_statement": "", "fail_to_pass": [],
+         "pass_to_pass": []},
+        {"id": "dup", "problem_statement": "", "fail_to_pass": [],
+         "pass_to_pass": []},
     ]
     with pytest.raises(ValueError):
         build_instances(base_dir=".", specs=specs)

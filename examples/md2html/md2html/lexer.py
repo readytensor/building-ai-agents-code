@@ -181,7 +181,8 @@ class Lexer:
             line = self.line()
             mc = _RE_FENCE.match(line)
             # Closing fence: same char, at least as long, no info string.
-            if mc and mc.group(2)[0] == fence[0] and len(mc.group(2)) >= len(fence) and not mc.group(3):
+            if (mc and mc.group(2)[0] == fence[0]
+                    and len(mc.group(2)) >= len(fence) and not mc.group(3)):
                 self.advance()
                 break
             body_lines.append(line)

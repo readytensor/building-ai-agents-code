@@ -1,0 +1,23 @@
+// Line length for Markdown: 86 for prose, 76 inside code blocks (a code
+// block in a rendered preview is narrower than the editor). Tables are
+// exempt. Check with: npx markdownlint-cli2 "**/*.md"
+{
+  "config": {
+    "default": false,
+    "MD013": {
+      "line_length": 86,
+      "heading_line_length": 86,
+      "code_block_line_length": 76,
+      "tables": false
+    }
+  },
+  "gitignore": true,
+  "ignores": [
+    "episodes/*/initial/**",
+    "episodes/*/sandbox/**",
+    "episodes/*/logs/**",
+    "eval/fixtures/**",
+    "**/tests/fixtures/**",
+    "**/held_out/**"
+  ]
+}

@@ -26,7 +26,8 @@ def test_write_summary_and_manifest(tmp_path):
     assert (tmp_path / "summary.json").exists()
     assert (tmp_path / "summary.md").exists()
 
-    manifest = {"agent": "ep5", "model": "gpt-x", "seed": 0, "instance_ids": ["a", "b"]}
+    manifest = {"agent": "ep5", "model": "gpt-x", "seed": 0,
+                "instance_ids": ["a", "b"]}
     write_manifest(tmp_path, manifest)
     saved = json.loads((tmp_path / "manifest.json").read_text())
     assert saved["agent"] == "ep5"

@@ -20,7 +20,9 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from tiktoken import get_encoding
 
-import tools as tools_module  # aliased: run_agent's `tools` parameter takes the canonical name; the loop sets tools_module.CURRENT_ROUND each turn
+# Aliased: run_agent's `tools` parameter takes the canonical name; the loop sets
+# tools_module.CURRENT_ROUND each turn.
+import tools as tools_module
 from tools import SANDBOX, TOOLS, write_tool_telemetry
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -109,7 +111,8 @@ _TOKENIZER = get_encoding("cl100k_base")
 def _count_tokens(messages):
     """Real token count (tiktoken) of these messages' content — used to record
     each round's tool-result total (tools_out)."""
-    return len(_TOKENIZER.encode("\n".join(str(m.get("content") or "") for m in messages)))
+    text = "\n".join(str(m.get("content") or "") for m in messages)
+    return len(_TOKENIZER.encode(text))
 
 
 # --- The agent loop, as a function. The signature is the anatomy of an agent:
@@ -130,7 +133,8 @@ def run_agent(client, model: str, system: str, tools: list, task: str) -> str:
 
     while True:
         iteration += 1
-        tools_module.CURRENT_ROUND = iteration   # tag tool calls with the round they happen in
+        # tag tool calls with the round they happen in
+        tools_module.CURRENT_ROUND = iteration
         resp = client.chat.completions.create(
             model=model, messages=messages, tools=tool_defs,
         )
@@ -138,10 +142,14 @@ def run_agent(client, model: str, system: str, tools: list, task: str) -> str:
         USAGE["iterations"] = iteration
         USAGE["input_tokens"] += usage.prompt_tokens
         USAGE["output_tokens"] += usage.completion_tokens
-        USAGE["per_iter"].append({"model_in": usage.prompt_tokens, "model_out": usage.completion_tokens, "tools": 0, "tools_out": 0})
+        USAGE["per_iter"].append({
+            "model_in": usage.prompt_tokens, "model_out": usage.completion_tokens,
+            "tools": 0, "tools_out": 0,
+        })
 
         msg = resp.choices[0].message
-        USAGE["per_iter"][-1]["tools"] = len(msg.tool_calls or [])   # tool calls requested this round
+        # tool calls requested this round
+        USAGE["per_iter"][-1]["tools"] = len(msg.tool_calls or [])
         messages.append(msg.model_dump(exclude_none=True))
 
         if not msg.tool_calls:
@@ -162,18 +170,24 @@ def run_agent(client, model: str, system: str, tools: list, task: str) -> str:
                 print(f"> {tc.function.name}({arg_preview})")
                 result = fn(**args)
             except (TypeError, KeyError, json.JSONDecodeError, ValueError) as e:
-                # Tool errors come back to the model as the tool result, not as an agent crash.
-                # The model can self-correct on the next iteration.
-                result = f"Error executing {tc.function.name}: {type(e).__name__}: {e}"
+                # Tool errors come back to the model as the tool result, not as an
+                # agent crash. The model can self-correct on the next iteration.
+                result = (
+                    f"Error executing {tc.function.name}: {type(e).__name__}: {e}"
+                )
                 print(f"  ! {result}")
-            preview = result if len(result) < 5000 else result[:5000] + "...[truncated]"
+            if len(result) < 5000:
+                preview = result
+            else:
+                preview = result[:5000] + "...[truncated]"
             print(f"  {preview}\n")
             tool_msg = {"role": "tool", "tool_call_id": tc.id, "content": result}
             round_tool_msgs.append(tool_msg)
             messages.append(tool_msg)
 
-        # Tool results are most of the context growth (a file read dwarfs the model's
-        # request); record this round's tool-result tokens so the per-iter numbers add up.
+        # Tool results are most of the context growth (a file read dwarfs the
+        # model's request); record this round's tool-result tokens so the
+        # per-iter numbers add up.
         USAGE["per_iter"][-1]["tools_out"] = _count_tokens(round_tool_msgs)
 
 

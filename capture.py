@@ -67,8 +67,8 @@ def run_and_capture(command, cwd, out_dir) -> int:
         command,
         cwd=cwd,
         env=child_env,
-        stdout=subprocess.PIPE,     # we capture stdout...
-        stderr=subprocess.STDOUT,   # ...and fold stderr into it, so errors are logged too
+        stdout=subprocess.PIPE,     # we capture stdout, and fold stderr into it,
+        stderr=subprocess.STDOUT,   # so errors are logged too
         text=True,
         encoding="utf-8",
         errors="replace",
@@ -109,9 +109,13 @@ def resolve_command(raw_command):
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run a command and tee its output to a log.")
-    parser.add_argument("--cwd", default=".", help="working directory to run in (default: current)")
-    parser.add_argument("--out", default=".", help="directory to write terminal.log/.jsonl into (default: current)")
+    parser = argparse.ArgumentParser(
+        description="Run a command and tee its output to a log.")
+    parser.add_argument("--cwd", default=".",
+                        help="working directory to run in (default: current)")
+    parser.add_argument("--out", default=".",
+                        help="directory to write terminal.log/.jsonl into "
+                             "(default: current)")
     parser.add_argument(
         "command", nargs=argparse.REMAINDER,
         help="command to run; defaults to `python -u agent.py`",

@@ -35,7 +35,8 @@ def _bucket(output: str, node_ids: list) -> dict:
 def score_pytest(repo_dir: Path, fail_to_pass: list, pass_to_pass: list) -> Verdict:
     node_ids = list(fail_to_pass) + list(pass_to_pass)
     proc = subprocess.run(
-        ["python", "-m", "pytest", *node_ids, "-v", "--tb=no", "-p", "no:cacheprovider"],
+        ["python", "-m", "pytest", *node_ids, "-v", "--tb=no",
+         "-p", "no:cacheprovider"],
         cwd=repo_dir, capture_output=True, text=True,
         encoding="utf-8", errors="replace",
     )
@@ -43,5 +44,6 @@ def score_pytest(repo_dir: Path, fail_to_pass: list, pass_to_pass: list) -> Verd
     return Verdict(
         fail_to_pass=_bucket(output, fail_to_pass),
         pass_to_pass=_bucket(output, pass_to_pass),
-        details=output[-2000:],  # tail is enough to see failures; keeps verify.json small
+        # tail is enough to see failures; keeps verify.json small
+        details=output[-2000:],
     )

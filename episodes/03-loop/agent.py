@@ -68,7 +68,8 @@ def bash(command: str) -> str:
         command, shell=True,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
         cwd=SANDBOX, encoding="utf-8", errors="replace",
-        start_new_session=(os.name != "nt"),  # POSIX: own group so we can kill the whole tree
+        # POSIX: own process group, so we can kill the whole tree
+        start_new_session=(os.name != "nt"),
     )
     try:
         output = proc.communicate(timeout=30)[0]
@@ -77,12 +78,13 @@ def bash(command: str) -> str:
         return (
             "Error: command timed out after 30s and was killed (whole process "
             "tree). Avoid long-running or interactive commands, watch for code "
-            "that can loop forever, and scope file searches to the working directory."
+            "that can loop forever, and scope file searches to the working "
+            "directory."
         )
     output = (output or "").strip()
-    if len(output) > 50_000:                 # cap transcript growth from chatty commands
+    if len(output) > 50_000:  # cap transcript growth from chatty commands
         output = output[:50_000] + "\n...[truncated]"
-    if proc.returncode:                      # surface failures so the model can adapt
+    if proc.returncode:       # surface failures so the model can adapt
         output += f"\n(exit code {proc.returncode})"
     return output or "(no output)"
 
@@ -120,11 +122,15 @@ BASH_TOOL = {
     "type": "function",
     "function": {
         "name": "bash",
-        "description": "Execute a shell command in the working directory and return its output.",
+        "description": (
+            "Execute a shell command in the working directory and return its output."
+        ),
         "parameters": {
             "type": "object",
             "properties": {
-                "command": {"type": "string", "description": "The shell command to run."},
+                "command": {
+                    "type": "string", "description": "The shell command to run.",
+                },
             },
             "required": ["command"],
         },
@@ -203,7 +209,8 @@ _TOKENIZER = get_encoding("cl100k_base")
 def _count_tokens(messages):
     """Real token count (tiktoken) of these messages' content — used to record
     each round's tool-result total (tools_out)."""
-    return len(_TOKENIZER.encode("\n".join(str(m.get("content") or "") for m in messages)))
+    text = "\n".join(str(m.get("content") or "") for m in messages)
+    return len(_TOKENIZER.encode(text))
 
 
 # --- 2. The agent loop, as a function. The signature is the anatomy of an
@@ -230,10 +237,14 @@ def run_agent(client, model: str, system: str, tools: list, task: str) -> str:
         USAGE["iterations"] = iteration
         USAGE["input_tokens"] += usage.prompt_tokens
         USAGE["output_tokens"] += usage.completion_tokens
-        USAGE["per_iter"].append({"model_in": usage.prompt_tokens, "model_out": usage.completion_tokens, "tools": 0, "tools_out": 0})
+        USAGE["per_iter"].append({
+            "model_in": usage.prompt_tokens, "model_out": usage.completion_tokens,
+            "tools": 0, "tools_out": 0,
+        })
 
         msg = resp.choices[0].message
-        USAGE["per_iter"][-1]["tools"] = len(msg.tool_calls or [])   # tool calls requested this round
+        # tool calls requested this round
+        USAGE["per_iter"][-1]["tools"] = len(msg.tool_calls or [])
         messages.append(msg.model_dump(exclude_none=True))
 
         if not msg.tool_calls:
@@ -242,7 +253,9 @@ def run_agent(client, model: str, system: str, tools: list, task: str) -> str:
         round_tool_msgs = []
         for tc in msg.tool_calls:
             args = json.loads(tc.function.arguments)
-            TOOL_CALLS.append({"round": iteration, "tool": tc.function.name, "args": args})
+            TOOL_CALLS.append(
+                {"round": iteration, "tool": tc.function.name, "args": args}
+            )
             print(f"> bash({args['command']!r})")
             result = bash(**args)
             if len(result) < 5000:
@@ -254,8 +267,9 @@ def run_agent(client, model: str, system: str, tools: list, task: str) -> str:
             round_tool_msgs.append(tool_msg)
             messages.append(tool_msg)
 
-        # Tool results are most of the context growth (a file read dwarfs the model's
-        # request); record this round's tool-result tokens so the per-iter numbers add up.
+        # Tool results are most of the context growth (a file read dwarfs the
+        # model's request); record this round's tool-result tokens so the
+        # per-iter numbers add up.
         USAGE["per_iter"][-1]["tools_out"] = _count_tokens(round_tool_msgs)
 
 

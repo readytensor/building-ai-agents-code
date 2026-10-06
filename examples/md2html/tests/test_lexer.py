@@ -114,7 +114,8 @@ def test_tab_normalization():
 
 def test_table_extension_emits_table_token():
     src = "| a | b |\n|---|---|\n| 1 | 2 |\n"
-    tokens = [t for t in Lexer(src, extensions=default_extensions()).tokenize() if t.kind != TK_BLANK]
+    tokens = [t for t in Lexer(src, extensions=default_extensions()).tokenize()
+              if t.kind != TK_BLANK]
     assert tokens[0].kind == "table"
     assert tokens[0].attrs["header"] == ["a", "b"]
     assert tokens[0].attrs["rows"] == [["1", "2"]]
@@ -122,6 +123,7 @@ def test_table_extension_emits_table_token():
 
 def test_footnote_extension_def_token():
     src = "[^1]: a footnote\n"
-    tokens = [t for t in Lexer(src, extensions=default_extensions()).tokenize() if t.kind != TK_BLANK]
+    tokens = [t for t in Lexer(src, extensions=default_extensions()).tokenize()
+              if t.kind != TK_BLANK]
     assert tokens[0].kind == "footnote_def"
     assert tokens[0].attrs["key"] == "1"

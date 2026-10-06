@@ -24,7 +24,8 @@ def test_cli_fake_agent_end_to_end(tmp_path, monkeypatch):
     }]
     # Point the local provider at the stub tree + specs.
     from eval.targets.local import build_instances
-    monkeypatch.setattr(run_eval, "load_local_instances", lambda: build_instances(base, specs))
+    monkeypatch.setattr(run_eval, "load_local_instances",
+                        lambda: build_instances(base, specs))
 
     results_root = tmp_path / "results"
     code = run_eval.main([
@@ -41,7 +42,8 @@ def test_cli_fake_agent_end_to_end(tmp_path, monkeypatch):
     # The manifest records how the sample was drawn, stratified or flat.
     manifest = json.loads((results_root / "t0" / "manifest.json").read_text())
     assert manifest["stratified"] is False
-    verdict = json.loads((results_root / "t0" / "md2html__demo" / "verify.json").read_text())
+    verdict = json.loads(
+        (results_root / "t0" / "md2html__demo" / "verify.json").read_text())
     assert verdict["passed"] is True
 
 
@@ -61,7 +63,8 @@ def _swebench_run(tmp_path, monkeypatch, extra_args):
         "pass_to_pass": ["test_math.py::test_mul"],
     }]
     from eval.targets.local import build_instances
-    monkeypatch.setattr(run_eval, "_load_instances", lambda source: build_instances(base, specs))
+    monkeypatch.setattr(run_eval, "_load_instances",
+                        lambda source: build_instances(base, specs))
     graded = []
 
     def fake_grade(inst_dir, model_label):
@@ -101,7 +104,8 @@ def test_partial_summary_survives_a_fatal_grading_failure(tmp_path, monkeypatch)
         for name in ("a", "b")
     ]
     from eval.targets.local import build_instances
-    monkeypatch.setattr(run_eval, "_load_instances", lambda source: build_instances(base, specs))
+    monkeypatch.setattr(run_eval, "_load_instances",
+                        lambda source: build_instances(base, specs))
 
     calls = []
 
@@ -115,7 +119,8 @@ def test_partial_summary_survives_a_fatal_grading_failure(tmp_path, monkeypatch)
     results_root = tmp_path / "results"
     with pytest.raises(RuntimeError):
         run_eval.main(["--source", "swebench", "--agent", "fake-fixing", "--n", "2",
-                       "--seed", "0", "--results-root", str(results_root), "--timestamp", "t2"])
+                       "--seed", "0", "--results-root", str(results_root),
+                       "--timestamp", "t2"])
     # The crash left a manifest and a summary covering the completed sample.
     batch = results_root / "t2"
     assert json.loads((batch / "manifest.json").read_text())["n"] == 2

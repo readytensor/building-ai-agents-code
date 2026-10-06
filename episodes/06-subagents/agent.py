@@ -70,7 +70,8 @@ import planning  # noqa: E402
 import skills  # noqa: E402
 import tools  # noqa: E402  module ref so run_agent can append to tools.TOOL_CALLS
 from tools import SANDBOX, tool, write_tool_telemetry  # noqa: E402
-from compaction import COMPACTION_THRESHOLD, KEEP_LAST_ITERATIONS, build_view, compact  # noqa: E402
+from compaction import (  # noqa: E402
+    COMPACTION_THRESHOLD, KEEP_LAST_ITERATIONS, build_view, compact)
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
@@ -112,7 +113,8 @@ summarizer_client = (
 )
 
 # --- Knobs. (Compaction knobs live in compaction.py.)
-MAX_ITERATIONS = int(os.environ.get("MAX_ITERATIONS", 200))          # orchestrator cap
+# Orchestrator cap.
+MAX_ITERATIONS = int(os.environ.get("MAX_ITERATIONS", 200))
 MAX_WORKER_ITER = int(os.environ.get("MAX_WORKER_ITER", 60))   # per-worker cap
 
 # Always-available, stateless file tools, by name. The plan/skills tools are
@@ -342,7 +344,8 @@ confirmed. Do not stop while any criterion is still unverified."""
 def delegate(task: str, agent_type: str) -> str:
     if agent_type not in AGENT_CONFIGS:
         return (f"Error: unknown agent_type '{agent_type}'. "
-                f"Available: {sorted(k for k in AGENT_CONFIGS if k != 'orchestrator')}")
+                "Available: "
+                f"{sorted(k for k in AGENT_CONFIGS if k != 'orchestrator')}")
     return run_agent(task, agent_type)
 
 
@@ -377,7 +380,8 @@ def run_agent(task: str, agent_type: str) -> str:
         elif tname == "list_skills":
             tools_by_name["list_skills"] = skills.make_list_skills_tool(loaded_skills)
         elif tname == "load_skill":
-            tools_by_name["load_skill"] = skills.make_load_skill_tool(loaded_skills, tools_by_name)
+            tools_by_name["load_skill"] = skills.make_load_skill_tool(
+                loaded_skills, tools_by_name)
         elif tname == "delegate" and is_orchestrator:
             tools_by_name["delegate"] = delegate
 
@@ -402,7 +406,8 @@ def run_agent(task: str, agent_type: str) -> str:
         history.append(message)
         log_entry(label, {"kind": "message", **message})
 
-    record({"role": "system", "content": cfg.prompt})  # rebuilt each turn (plan+skills)
+    # Rebuilt each turn (plan+skills).
+    record({"role": "system", "content": cfg.prompt})
     record({"role": "user", "content": task})
     iter_cap = MAX_ITERATIONS if is_orchestrator else MAX_WORKER_ITER
 
@@ -447,7 +452,8 @@ def run_agent(task: str, agent_type: str) -> str:
             return text
 
         # Split delegate (parallelizable) from everything else (sequential).
-        delegate_calls = [tc for tc in msg.tool_calls if tc.function.name == "delegate"]
+        delegate_calls = [tc for tc in msg.tool_calls
+                          if tc.function.name == "delegate"]
         other_calls = [tc for tc in msg.tool_calls if tc.function.name != "delegate"]
         results_by_id: dict = {}
 
@@ -467,7 +473,8 @@ def run_agent(task: str, agent_type: str) -> str:
                 elif tc.function.name == "load_skill":
                     metrics.load_skill_calls += 1
             except (TypeError, KeyError, json.JSONDecodeError, ValueError) as e:
-                result = f"Error executing {tc.function.name}: {type(e).__name__}: {e}"
+                result = (f"Error executing {tc.function.name}: "
+                          f"{type(e).__name__}: {e}")
                 p(f"  ! {result}")
             p(f"  {_truncate(result)}")
             results_by_id[tc.id] = result
@@ -486,15 +493,19 @@ def run_agent(task: str, agent_type: str) -> str:
                 p(f"  {_truncate(result)}")
                 results_by_id[tc.id] = result
             else:
-                types = [json.loads(tc.function.arguments).get("agent_type") for tc in delegate_calls]
-                p(f">>> Dispatching {len(delegate_calls)} workers in PARALLEL: {types}")
+                types = [json.loads(tc.function.arguments).get("agent_type")
+                         for tc in delegate_calls]
+                p(f">>> Dispatching {len(delegate_calls)} workers in PARALLEL: "
+                  f"{types}")
                 with ThreadPoolExecutor(max_workers=len(delegate_calls)) as pool:
                     futures = {}
                     for tc in delegate_calls:
                         args = json.loads(tc.function.arguments)
-                        tools.TOOL_CALLS.append({"round": metrics.iterations, "agent": label,
-                                                 "tool": "delegate", "args": args})
-                        p(f">    [submit] delegate(agent_type={args.get('agent_type')!r}, "
+                        tools.TOOL_CALLS.append({"round": metrics.iterations,
+                                                 "agent": label, "tool": "delegate",
+                                                 "args": args})
+                        p(">    [submit] "
+                          f"delegate(agent_type={args.get('agent_type')!r}, "
                           f"task=<{len(str(args.get('task', '')))}chars>)")
                         futures[pool.submit(delegate, **args)] = tc
                     for fut in as_completed(futures):
@@ -502,7 +513,8 @@ def run_agent(task: str, agent_type: str) -> str:
                         try:
                             result = fut.result()
                         except Exception as e:
-                            result = f"Error in worker delegate: {type(e).__name__}: {e}"
+                            result = ("Error in worker delegate: "
+                                      f"{type(e).__name__}: {e}")
                         atype = json.loads(tc.function.arguments).get("agent_type")
                         p(f">    [done] delegate({atype!r}): {_truncate(result)}")
                         results_by_id[tc.id] = result
@@ -517,9 +529,12 @@ def run_agent(task: str, agent_type: str) -> str:
         # Compaction — per-worker, on this agent's own history. compact() reads
         # the current view and returns a summary; it never rewrites the history.
         view = build_view(history, folds)
-        summary_msg, tail_len, ci, co, _middle = compact(view, summarizer_client, SUMMARIZER_MODEL)
-        metrics.compact_in += ci     # counted even when the summary was rejected —
-        metrics.compact_out += co    # a guard-skipped attempt still spent these tokens
+        summary_msg, tail_len, ci, co, _middle = compact(
+            view, summarizer_client, SUMMARIZER_MODEL)
+        # Counted even when the summary was rejected — a guard-skipped attempt
+        # still spent these tokens.
+        metrics.compact_in += ci
+        metrics.compact_out += co
         if summary_msg:
             # The fold: from here on, this summary stands in for everything
             # between the head and the preserved tail. Recording where the tail
@@ -533,7 +548,8 @@ def run_agent(task: str, agent_type: str) -> str:
             folds.append(fold)
             log_entry(label, fold)
             metrics.compactions += 1
-            p(f"  [COMPACTION FIRED — {len(view)} messages → {len(build_view(history, folds))}, "
+            p(f"  [COMPACTION FIRED — {len(view)} messages → "
+              f"{len(build_view(history, folds))}, "
               f"history still {len(history)}, summarizer in={ci} out={co}]")
         elif ci:
             # The guard in compact() rejected a truncated/empty summary reply.
@@ -546,7 +562,8 @@ def run_agent(task: str, agent_type: str) -> str:
         if m.get("role") == "assistant":
             last_text = m.get("content") or ""
             break
-    return (f"[worker '{agent_type}' hit its iteration cap ({iter_cap}) without finishing]\n"
+    return (f"[worker '{agent_type}' hit its iteration cap ({iter_cap}) "
+            "without finishing]\n"
             f"Last assistant text: {last_text[:300]}")
 
 
@@ -568,7 +585,8 @@ TASK = """I want to round out our GFM support with three more features:
   1. Strikethrough: ~~text~~ -> <del>text</del>
   2. Task lists: list items starting with `- [ ]` or `- [x]` render
      with a disabled <input type="checkbox"> prepended (checked for [x]).
-  3. Autolinks: <https://example.com> -> <a href="https://example.com">https://example.com</a>
+  3. Autolinks: <https://example.com> -> <a href="https://example.com">\
+https://example.com</a>
 
 Add each as a new extension under md2html/extensions/ and register
 each in md2html/extensions/__init__.py. There are test fixture pairs

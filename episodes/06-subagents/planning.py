@@ -58,7 +58,8 @@ def system_with_plan(base_system: str, plan: list[dict]) -> str:
     "so it survives compaction."
 )
 def write_plan(steps) -> str:
-    raise RuntimeError("write_plan must be dispatched via make_plan_tool's per-call closure")
+    raise RuntimeError(
+        "write_plan must be dispatched via make_plan_tool's per-call closure")
 
 
 def make_plan_tool(plan: list[dict]):

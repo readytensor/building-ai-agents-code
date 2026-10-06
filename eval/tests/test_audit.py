@@ -74,7 +74,8 @@ def test_empty_patch_is_a_finding():
     findings = audit.run_checks("   \n")
     assert len(findings) == 1
     assert "empty" in findings[0]
-    assert "git stash" in findings[0]  # the recovery hint names the failure modes seen live
+    # the recovery hint names the failure modes seen live
+    assert "git stash" in findings[0]
 
 
 def test_source_edit_passes_clean():
@@ -139,11 +140,13 @@ def _run_solve(tmp_path, monkeypatch, audit_hook):
     chat_calls = []
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.setattr(agent, "_chat_with_retry",
-                        lambda client, **kw: chat_calls.append(kw) or _stop_response())
+                        lambda client, **kw:
+                        chat_calls.append(kw) or _stop_response())
     monkeypatch.chdir(tmp_path)  # solve writes telemetry to cwd
     agent.solve(tmp_path, "task", audit=audit_hook)
     metrics = json.loads((tmp_path / "metrics.json").read_text(encoding="utf-8"))
-    transcript = json.loads((tmp_path / "transcript.json").read_text(encoding="utf-8"))
+    transcript = json.loads(
+        (tmp_path / "transcript.json").read_text(encoding="utf-8"))
     return chat_calls, metrics["agents"][0]["audit"], transcript
 
 
@@ -158,7 +161,8 @@ def test_clean_stop_is_accepted_first_time(tmp_path, monkeypatch):
 
 def test_findings_bounce_once_then_stop_is_unconditional(tmp_path, monkeypatch):
     audit_calls = []
-    hook = lambda: audit_calls.append(1) or ["the captured patch is empty"]  # noqa: E731
+    hook = lambda: (  # noqa: E731
+        audit_calls.append(1) or ["the captured patch is empty"])
     chat_calls, audit_metrics, transcript = _run_solve(tmp_path, monkeypatch, hook)
     # Stop requested twice: first bounced with the finding, second accepted
     # unconditionally even though the finding still stands.

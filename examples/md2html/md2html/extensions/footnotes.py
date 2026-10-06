@@ -88,7 +88,8 @@ class FootnotesExtension:
         parser.advance()
         # Inline-parse the body so links/emphasis inside footnote text work.
         children = parser._parse_inline(tok.value)
-        return ASTNode("footnote_def", children=children, attrs={"key": tok.attrs["key"]})
+        return ASTNode("footnote_def", children=children,
+                       attrs={"key": tok.attrs["key"]})
 
     def post_parse(self, root, parser):
         """Pull all footnote_def nodes out of the tree and stash them on the

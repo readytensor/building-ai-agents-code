@@ -111,7 +111,8 @@ def make_list_skills_tool(loaded: dict):
             sname = fm.get("name", skill_dir.name)
             tag = " (LOADED)" if sname in loaded else ""
             entries.append(f"- **{sname}**{tag}: {fm.get('description', '')}")
-        return ("Available skills:\n" + "\n".join(entries)) if entries else "No skills available."
+        return (("Available skills:\n" + "\n".join(entries)) if entries
+                else "No skills available.")
     return list_skills
 
 
@@ -130,7 +131,8 @@ def make_load_skill_tool(loaded: dict, tools_by_name: dict):
         if name in loaded:
             return f"Skill '{name}' is already loaded."
         if not (_SKILLS_DIR / name / "SKILL.md").exists():
-            return f"Error: skill '{name}' not found. Call list_skills() to see available skills."
+            return (f"Error: skill '{name}' not found. "
+                    "Call list_skills() to see available skills.")
         skill = _load_skill_body(name)
         loaded[name] = skill
         new_tools = []
@@ -158,7 +160,8 @@ def system_with_skills(base_system: str, loaded: dict) -> str:
         return base_system
     parts = [base_system]
     for name, skill in loaded.items():
-        parts.append(f"\n\n[LOADED SKILL: {name}]\n{skill['body']}\n[end skill: {name}]")
+        parts.append(f"\n\n[LOADED SKILL: {name}]\n{skill['body']}"
+                     f"\n[end skill: {name}]")
     return "".join(parts)
 
 
@@ -207,7 +210,8 @@ def web_search(query: str, max_results: int = 5) -> str:
                 return unquote(params["uddg"][0])
         return href
 
-    link_re = re.compile(r'<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>', re.DOTALL)
+    link_re = re.compile(
+        r'<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>', re.DOTALL)
     snippet_re = re.compile(r'class="result__snippet"[^>]*>(.*?)</a>', re.DOTALL)
     snippets = snippet_re.findall(body)
     results = []
@@ -234,7 +238,8 @@ def fetch_url(url: str) -> str:
             body = resp.read()
         text = body.decode("utf-8", errors="replace")
         if len(text) > 50_000:
-            return text[:50_000] + f"\n\n[...truncated; full length was {len(text):,} chars]"
+            return (text[:50_000]
+                    + f"\n\n[...truncated; full length was {len(text):,} chars]")
         return text
     except urllib.error.HTTPError as e:
         return f"HTTP {e.code} fetching {url}: {e.reason}"
@@ -267,7 +272,8 @@ def lint(path: str = ".") -> str:
 )
 def coverage() -> str:
     result = subprocess.run(  # noqa: S603  # nosec
-        ["python", "-m", "pytest", "--cov=md2html", "--cov-report=term-missing", "-q"],
+        ["python", "-m", "pytest", "--cov=md2html", "--cov-report=term-missing",
+         "-q"],
         capture_output=True, text=True,
         cwd=SANDBOX, timeout=60,
         encoding="utf-8", errors="replace",

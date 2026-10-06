@@ -134,7 +134,8 @@ class Parser:
             return ASTNode(
                 "code_block",
                 value=tok.value,
-                attrs={"lang": tok.attrs.get("lang", ""), "info": tok.attrs.get("info", "")},
+                attrs={"lang": tok.attrs.get("lang", ""),
+                       "info": tok.attrs.get("info", "")},
             )
 
         if tok.kind == TK_BLOCKQUOTE_LINE:
@@ -164,7 +165,8 @@ class Parser:
 
         list_node = ASTNode(
             "list",
-            attrs={"ordered": ordered, "start": start if ordered and start != 1 else None},
+            attrs={"ordered": ordered,
+                   "start": start if ordered and start != 1 else None},
         )
 
         while not self.eof():
@@ -183,7 +185,8 @@ class Parser:
                 if (
                     nxt.kind != TK_LIST_ITEM
                     or nxt.attrs["indent"] < base_indent
-                    or (nxt.attrs["indent"] == base_indent and nxt.attrs["ordered"] != ordered)
+                    or (nxt.attrs["indent"] == base_indent
+                        and nxt.attrs["ordered"] != ordered)
                 ):
                     # Rewind so the caller still sees the blank tokens.
                     self.pos = save
@@ -306,7 +309,8 @@ class Parser:
                 end, alt, url, title = self._match_link(text, i + 1)
                 if end > 0:
                     flush()
-                    img = ASTNode("image", value=alt, attrs={"src": url, "title": title})
+                    img = ASTNode("image", value=alt,
+                                  attrs={"src": url, "title": title})
                     out.append(img)
                     i = end
                     continue

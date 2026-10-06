@@ -18,7 +18,8 @@ def aggregate(results: list, repeat: int) -> dict:
         by_id.setdefault(r["id"], []).append(r)
     n = len(by_id)
     first_pass = sum(1 for attempts in by_id.values() if attempts[0]["passed"])
-    any_pass = sum(1 for attempts in by_id.values() if any(a["passed"] for a in attempts))
+    any_pass = sum(1 for attempts in by_id.values()
+                   if any(a["passed"] for a in attempts))
     seconds = [r["seconds"] for r in results]
     return {
         "n_instances": n,
@@ -31,7 +32,8 @@ def aggregate(results: list, repeat: int) -> dict:
 
 def write_summary(batch_dir: Path, agg: dict, results: list) -> None:
     (batch_dir / "summary.json").write_text(
-        json.dumps({"aggregate": agg, "instances": results}, indent=2), encoding="utf-8"
+        json.dumps({"aggregate": agg, "instances": results}, indent=2),
+        encoding="utf-8"
     )
     lines = [
         "# Eval batch summary", "",
@@ -43,16 +45,19 @@ def write_summary(batch_dir: Path, agg: dict, results: list) -> None:
         "|---|---|---|---|",
     ]
     for r in results:
-        lines.append(f"| {r['id']} | {r['run_label']} | {'PASS' if r['passed'] else 'fail'} | {r['seconds']} |")
+        lines.append(f"| {r['id']} | {r['run_label']} | "
+                     f"{'PASS' if r['passed'] else 'fail'} | {r['seconds']} |")
     (batch_dir / "summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def write_manifest(batch_dir: Path, manifest: dict) -> None:
-    (batch_dir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    (batch_dir / "manifest.json").write_text(json.dumps(manifest, indent=2),
+                                             encoding="utf-8")
 
 
 _SCOREBOARD_COLS = ["timestamp", "agent", "model", "source", "n", "repeat",
-                    "seed", "grading", "pass_at_1", "pass_at_k", "mean_seconds", "batch_dir"]
+                    "seed", "grading", "pass_at_1", "pass_at_k", "mean_seconds",
+                    "batch_dir"]
 
 
 def append_scoreboard(results_root: Path, row: dict) -> None:
@@ -62,11 +67,15 @@ def append_scoreboard(results_root: Path, row: dict) -> None:
     with jsonl.open("a", encoding="utf-8") as f:
         f.write(json.dumps(row) + "\n")
 
-    rows = [json.loads(line) for line in jsonl.read_text(encoding="utf-8").splitlines() if line.strip()]
+    rows = [json.loads(line)
+            for line in jsonl.read_text(encoding="utf-8").splitlines()
+            if line.strip()]
     header = "| " + " | ".join(_SCOREBOARD_COLS) + " |"
     sep = "|" + "|".join(["---"] * len(_SCOREBOARD_COLS)) + "|"
-    body = ["| " + " | ".join(str(r.get(c, "")) for c in _SCOREBOARD_COLS) + " |" for r in rows]
-    (results_root / "scoreboard.md").write_text("\n".join([header, sep, *body]) + "\n", encoding="utf-8")
+    body = ["| " + " | ".join(str(r.get(c, "")) for c in _SCOREBOARD_COLS) + " |"
+            for r in rows]
+    (results_root / "scoreboard.md").write_text(
+        "\n".join([header, sep, *body]) + "\n", encoding="utf-8")
 
 
 # --- Retention: keep verbose logs only where you'd actually look (failures). ---
@@ -91,6 +100,7 @@ def apply_retention(batch_dir: Path, results: list, keep: str) -> None:
             if drop:
                 path.unlink()
             else:
-                with path.open("rb") as src, gzip.open(str(path) + ".gz", "wb") as dst:
+                with path.open("rb") as src, \
+                        gzip.open(str(path) + ".gz", "wb") as dst:
                     shutil.copyfileobj(src, dst)
                 path.unlink()

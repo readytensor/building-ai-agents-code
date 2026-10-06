@@ -56,8 +56,10 @@ _SKILLS_DIR = Path(".skills")
 # body (into the system prompt) and its tools (into the live registry). Both
 # are module state here — Ep 5 runs a single agent, so a module-level dict is
 # enough. (Ep 6 makes these per-call so concurrent workers don't share state.)
-LOADED_SKILLS: dict[str, dict] = {}    # name -> {"name", "description", "tools", "body"}
-LOADED_TOOLS: dict[str, callable] = {}  # tool_name -> callable, for skills loaded so far
+# name -> {"name", "description", "tools", "body"}
+LOADED_SKILLS: dict[str, dict] = {}
+# tool_name -> callable, for skills loaded so far
+LOADED_TOOLS: dict[str, callable] = {}
 
 
 def _parse_skill_md(path: Path) -> dict:
@@ -68,7 +70,8 @@ def _parse_skill_md(path: Path) -> dict:
     missing or malformed (the file's whole text becomes the body)."""
     text = path.read_text(encoding="utf-8")
     lines = text.splitlines()
-    meta = {"name": path.parent.name, "description": "", "tools": [], "body": text.strip()}
+    meta = {"name": path.parent.name, "description": "", "tools": [],
+            "body": text.strip()}
     if not lines or lines[0].strip() != "---":
         return meta
     try:
@@ -106,7 +109,8 @@ def list_skills() -> str:
         meta = _parse_skill_md(meta_path)
         loaded = " (LOADED)" if meta["name"] in LOADED_SKILLS else ""
         entries.append(f"- **{meta['name']}**{loaded}: {meta['description']}")
-    return "Available skills:\n" + "\n".join(entries) if entries else "No skills available."
+    return ("Available skills:\n" + "\n".join(entries) if entries
+            else "No skills available.")
 
 
 @tool(
@@ -121,7 +125,8 @@ def load_skill(name: str) -> str:
         return f"Skill '{name}' is already loaded."
     meta_path = _SKILLS_DIR / name / "SKILL.md"
     if not meta_path.exists():
-        return f"Error: skill '{name}' not found. Call list_skills() to see available skills."
+        return (f"Error: skill '{name}' not found. "
+                "Call list_skills() to see available skills.")
     skill = _parse_skill_md(meta_path)
     LOADED_SKILLS[name] = skill
     new_tools = []
@@ -183,7 +188,8 @@ def web_search(query: str, max_results: int = 5) -> str:
                 return unquote(params["uddg"][0])
         return href
 
-    link_re = re.compile(r'<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>', re.DOTALL)
+    link_re = re.compile(
+        r'<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>', re.DOTALL)
     snippet_re = re.compile(r'class="result__snippet"[^>]*>(.*?)</a>', re.DOTALL)
     snippets = snippet_re.findall(body)
     results = []
@@ -210,7 +216,8 @@ def fetch_url(url: str) -> str:
             body = resp.read()
         text = body.decode("utf-8", errors="replace")
         if len(text) > 50_000:
-            return text[:50_000] + f"\n\n[...truncated; full length was {len(text):,} chars]"
+            return (text[:50_000]
+                    + f"\n\n[...truncated; full length was {len(text):,} chars]")
         return text
     except urllib.error.HTTPError as e:
         return f"HTTP {e.code} fetching {url}: {e.reason}"
@@ -243,7 +250,8 @@ def lint(path: str = ".") -> str:
 )
 def coverage() -> str:
     result = subprocess.run(  # noqa: S603  # nosec
-        ["python", "-m", "pytest", "--cov=md2html", "--cov-report=term-missing", "-q"],
+        ["python", "-m", "pytest", "--cov=md2html", "--cov-report=term-missing",
+         "-q"],
         capture_output=True, text=True,
         cwd=SANDBOX, timeout=60,
         encoding="utf-8", errors="replace",
@@ -271,5 +279,6 @@ def system_with_skills(base_system: str) -> str:
         return base_system
     parts = [base_system]
     for name, skill in LOADED_SKILLS.items():
-        parts.append(f"\n\n[LOADED SKILL: {name}]\n{skill['body']}\n[end skill: {name}]")
+        parts.append(f"\n\n[LOADED SKILL: {name}]\n{skill['body']}"
+                     f"\n[end skill: {name}]")
     return "".join(parts)

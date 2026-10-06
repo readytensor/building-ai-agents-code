@@ -27,7 +27,8 @@ def _make_repo(tmp_path: Path) -> Path:
         "def top(a, b=1, *args, **kwargs):\n"
         "    pass\n", encoding="utf-8")
     (pkg / "sub" / "__init__.py").write_text("", encoding="utf-8")
-    (pkg / "sub" / "util.py").write_text("def helper():\n    pass\n", encoding="utf-8")
+    (pkg / "sub" / "util.py").write_text("def helper():\n    pass\n",
+                                         encoding="utf-8")
     tests = tmp_path / "tests"
     tests.mkdir()
     (tests / "conftest.py").write_text("", encoding="utf-8")

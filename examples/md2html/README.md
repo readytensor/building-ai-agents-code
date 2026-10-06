@@ -23,7 +23,7 @@ This installs the `md2html` command, and pytest for the test suite.
 md2html notes.md                      # writes notes.html next to the input
 md2html notes.md -o page.html         # writes to a file you name
 md2html notes.md --stdout             # prints the HTML instead
-md2html notes.md --standalone         # a complete page with a built-in stylesheet
+md2html notes.md --standalone         # a full page with a stylesheet
 ```
 
 Without `--standalone`, the output is an HTML fragment for the page body.
@@ -53,7 +53,8 @@ Eight extensions are on by default:
 - **code_blocks**: a `language-…` class on fenced code blocks.
 - **footnotes**: `[^1]` references, with the notes collected at the end.
 - **reference_links**: `[text][id]` links, resolved against `[id]: url "title"` lines.
-- **github_alerts**: `> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]` and `[!CAUTION]` blockquotes, rendered as GitHub's alert boxes.
+- **github_alerts**: `> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]` and
+  `[!CAUTION]` blockquotes, rendered as GitHub's alert boxes.
 - **strikethrough**: `~~text~~` becomes `<del>text</del>`.
 - **task_lists**: `- [ ]` and `- [x]` list items get a checkbox.
 - **autolinks**: `<https://example.com>` becomes a link.

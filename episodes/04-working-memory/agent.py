@@ -39,9 +39,13 @@ from openai import OpenAI
 # is the one side effect that can't wait for main().
 load_dotenv(Path("../../.env"))
 
-import tools as tools_module  # noqa: E402  aliased: run_agent's `tools` parameter takes the canonical name; the loop sets tools_module.CURRENT_ROUND each turn
+# Aliased: run_agent's `tools` parameter takes the canonical name; the loop sets
+# tools_module.CURRENT_ROUND each turn.
+import tools as tools_module  # noqa: E402
 from tools import SANDBOX, TOOLS as BASE_TOOLS, write_tool_telemetry  # noqa: E402
-from compaction import COMPACTION_THRESHOLD, KEEP_LAST_ITERATIONS, build_view, compact, _count_tokens  # noqa: E402
+from compaction import (  # noqa: E402
+    COMPACTION_THRESHOLD, KEEP_LAST_ITERATIONS, build_view, compact, _count_tokens,
+)
 from planning import write_plan, system_with_plan  # noqa: E402
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -135,7 +139,8 @@ USAGE = {
     # "reasoning" is the shared metrics key across Eps 4-6 + run.py —
     # a stable grouping for write_plan's call count.
     "reasoning": {"write_plan": 0},
-    "per_iter": [],  # {model_in, model_out, tools, tools_out, middle, compacted} per round
+    # {model_in, model_out, tools, tools_out, middle, compacted} per round
+    "per_iter": [],
 }
 
 
@@ -186,7 +191,8 @@ def run_agent(client, model: str, system: str, tools: list,
 
     while iteration < MAX_ITERATIONS:
         iteration += 1
-        tools_module.CURRENT_ROUND = iteration   # tag tool calls with the round they happen in
+        # Tag tool calls with the round they happen in.
+        tools_module.CURRENT_ROUND = iteration
 
         # What the model sees this turn, derived rather than stored: the history
         # projected through its folds, then the system prompt rebuilt from the
@@ -204,10 +210,14 @@ def run_agent(client, model: str, system: str, tools: list,
         USAGE["iterations"] = iteration
         USAGE["input_tokens"] += u.prompt_tokens
         USAGE["output_tokens"] += u.completion_tokens
-        USAGE["per_iter"].append({"model_in": u.prompt_tokens, "model_out": u.completion_tokens, "tools": 0, "tools_out": 0, "middle": 0, "compacted": False})
+        USAGE["per_iter"].append({
+            "model_in": u.prompt_tokens, "model_out": u.completion_tokens,
+            "tools": 0, "tools_out": 0, "middle": 0, "compacted": False,
+        })
 
         msg = resp.choices[0].message
-        USAGE["per_iter"][-1]["tools"] = len(msg.tool_calls or [])   # tool calls requested this round
+        # Tool calls requested this round.
+        USAGE["per_iter"][-1]["tools"] = len(msg.tool_calls or [])
         record(msg.model_dump(exclude_none=True))
 
         if not msg.tool_calls:
@@ -233,17 +243,22 @@ def run_agent(client, model: str, system: str, tools: list,
             except (TypeError, KeyError, json.JSONDecodeError, ValueError) as e:
                 # Bad tool call (missing args, unknown tool, etc.) — feed the error
                 # back to the model so it can self-correct rather than crashing.
-                result = f"Error executing {tc.function.name}: {type(e).__name__}: {e}"
+                result = (
+                    f"Error executing {tc.function.name}: {type(e).__name__}: {e}"
+                )
                 print(f"  ! {result}")
-            preview = result if len(result) < 5000 else result[:5000] + "...[truncated]"
+            preview = (
+                result if len(result) < 5000 else result[:5000] + "...[truncated]"
+            )
             print(f"  {preview}\n")
             tool_msg = {"role": "tool", "tool_call_id": tc.id, "content": result}
             round_tool_msgs.append(tool_msg)
             record(tool_msg)
 
-        # Tool results are most of the context growth: the model only *requests* a tool
-        # (small `out`), but the result it hands back can be huge (a file read). Record
-        # this round's tool-result tokens so the per-iter numbers actually add up.
+        # Tool results are most of the context growth: the model only *requests* a
+        # tool (small `out`), but the result it hands back can be huge (a file read).
+        # Record this round's tool-result tokens so the per-iter numbers actually add
+        # up.
         USAGE["per_iter"][-1]["tools_out"] = _count_tokens(round_tool_msgs)
 
         # Compaction: compact() summarizes the older middle once the MIDDLE's own
@@ -252,10 +267,14 @@ def run_agent(client, model: str, system: str, tools: list,
         # worth it (and with KEEP small, the fire drops the input hard). It reads
         # the current view and returns a summary; it never rewrites the history.
         view = build_view(history, folds)
-        summary_msg, tail_len, ci, co, middle_tok = compact(view, summarizer_client, summarizer_model)
-        USAGE["per_iter"][-1]["middle"] = middle_tok   # compactable-middle size this turn (the sawtooth metric)
-        USAGE["compact_in"] += ci    # counted even when the summary was rejected —
-        USAGE["compact_out"] += co   # a guard-skipped attempt still spent these tokens
+        summary_msg, tail_len, ci, co, middle_tok = compact(
+            view, summarizer_client, summarizer_model)
+        # Compactable-middle size this turn (the sawtooth metric).
+        USAGE["per_iter"][-1]["middle"] = middle_tok
+        # Counted even when the summary was rejected — a guard-skipped attempt still
+        # spent these tokens.
+        USAGE["compact_in"] += ci
+        USAGE["compact_out"] += co
         if summary_msg:
             # The fold: from here on, this summary stands in for everything
             # between the head and the preserved tail. Recording where the tail
@@ -269,12 +288,15 @@ def run_agent(client, model: str, system: str, tools: list,
             folds.append(fold)
             log_entry(fold)
             USAGE["compactions"] += 1
-            USAGE["per_iter"][-1]["compacted"] = True   # the middle crossed the threshold this iteration
-            print(f"  [COMPACTION FIRED — {len(view)} messages → {len(build_view(history, folds))}, "
+            # The middle crossed the threshold this iteration.
+            USAGE["per_iter"][-1]["compacted"] = True
+            print(f"  [COMPACTION FIRED — {len(view)} messages → "
+                  f"{len(build_view(history, folds))}, "
                   f"history still {len(history)}, summarizer in={ci} out={co}]\n")
         elif ci:
             # The guard in compact() rejected a truncated/empty summary reply.
-            print(f"  [COMPACTION SKIPPED — summary reply hit its token cap; keeping full history this round (summarizer in={ci} out={co})]\n")
+            print(f"  [COMPACTION SKIPPED — summary reply hit its token cap; "
+                  f"keeping full history this round (summarizer in={ci} out={co})]\n")
 
     return None   # iteration cap reached without a natural stop
 
@@ -304,7 +326,8 @@ def main():
     )
 
     print(f"USER: {TASK}\n")
-    final = run_agent(client, model, SYSTEM, TOOLS, summarizer_client, summarizer_model, TASK)
+    final = run_agent(client, model, SYSTEM, TOOLS,
+                      summarizer_client, summarizer_model, TASK)
     if final is None:
         print(f"\n=== MAX_ITERATIONS REACHED ({MAX_ITERATIONS}) — aborting ===")
     else:

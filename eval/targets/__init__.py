@@ -25,7 +25,8 @@ class Verdict:
 
     @property
     def passed(self) -> bool:
-        f2p_all_pass = len(self.fail_to_pass["failed"]) == 0 and len(self.fail_to_pass["passed"]) > 0
+        f2p_all_pass = (len(self.fail_to_pass["failed"]) == 0
+                        and len(self.fail_to_pass["passed"]) > 0)
         p2p_no_regress = len(self.pass_to_pass["failed"]) == 0
         return f2p_all_pass and p2p_no_regress
 

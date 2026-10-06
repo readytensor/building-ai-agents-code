@@ -45,7 +45,8 @@ def test_container_tool_records_result_excerpt(monkeypatch):
     import tools
     from eval import container
     monkeypatch.setattr(container, "ACTIVE", "cid1")
-    monkeypatch.setattr(container, "fileop", lambda cid, op, kwargs: "container output")
+    monkeypatch.setattr(container, "fileop",
+                        lambda cid, op, kwargs: "container output")
     monkeypatch.setattr(tools, "TOOL_CALLS", [])
 
     out = agent._call_tool({}, "read", {"path": "f.py"})

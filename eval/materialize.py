@@ -15,7 +15,8 @@ _IDENTITY = ["-c", "user.email=eval@example.com", "-c", "user.name=eval"]
 def _git(repo: Path, *args) -> str:
     return subprocess.run(
         ["git", *_IDENTITY, "-C", str(repo), *args],
-        check=True, capture_output=True, text=True, encoding="utf-8", errors="replace",
+        check=True, capture_output=True, text=True, encoding="utf-8",
+        errors="replace",
     ).stdout
 
 

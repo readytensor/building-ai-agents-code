@@ -16,14 +16,16 @@ def _instance(base_repo, env_setup=None):
     )
 
 
-def test_runner_calls_env_setup_and_teardown_around_solve(base_repo, tmp_path, solvers):
+def test_runner_calls_env_setup_and_teardown_around_solve(base_repo, tmp_path,
+                                                          solvers):
     events = []
 
     def setup(work_dir):
         events.append(("setup", work_dir.name))
         return lambda: events.append(("teardown", None))
 
-    run_instance(_instance(base_repo, setup), solvers["fixing"], tmp_path / "b", run_label="calc__add")
+    run_instance(_instance(base_repo, setup), solvers["fixing"], tmp_path / "b",
+                 run_label="calc__add")
     assert [e[0] for e in events] == ["setup", "teardown"]
     assert events[0][1] == "repo"  # setup receives the materialized working copy
 
@@ -38,14 +40,17 @@ def test_teardown_runs_even_when_solve_raises(base_repo, tmp_path):
         raise RuntimeError("boom")
 
     with pytest.raises(RuntimeError):
-        run_instance(_instance(base_repo, setup), exploding_solver, tmp_path / "b", run_label="x")
+        run_instance(_instance(base_repo, setup), exploding_solver, tmp_path / "b",
+                     run_label="x")
     assert events == ["teardown"]
 
 
 def test_swebench_env_setup_starts_and_stops_container(monkeypatch):
     calls = []
-    monkeypatch.setattr(swebench.container, "start", lambda iid: calls.append(("start", iid)) or "cid1")
-    monkeypatch.setattr(swebench.container, "stop", lambda cid: calls.append(("stop", cid)))
+    monkeypatch.setattr(swebench.container, "start",
+                        lambda iid: calls.append(("start", iid)) or "cid1")
+    monkeypatch.setattr(swebench.container, "stop",
+                        lambda cid: calls.append(("stop", cid)))
     inst = swebench.to_instance(FAKE_RECORD)
     teardown = inst.env_setup(None)  # container-backed: no host working copy
     teardown()

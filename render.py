@@ -1,5 +1,6 @@
 """
-render.py — render a Markdown file with an episode's md2html, to see what the agent built.
+render.py — render a Markdown file with an episode's md2html, to see what the
+agent built.
 
 Single responsibility: run md2html on one Markdown file and write the HTML page
 next to it. After a run, the agent's version of md2html is in the episode's
@@ -10,9 +11,13 @@ pip installed, not the one the agent just changed, so this script runs md2html
 from inside the folder you name and always uses that copy.
 
 Command line (from the repo root):
-    python render.py --cwd episodes/04-tools examples/emoji.md      # the agent's md2html, after a run
-    python render.py examples/about-the-series.md                    # the finished md2html in examples/
-    python render.py --cwd episodes/03-loop examples/toc.md --open   # also open the page in a browser
+
+    # the agent's md2html, after a run
+    python render.py --cwd episodes/04-tools examples/emoji.md
+    # the finished md2html in examples/
+    python render.py examples/about-the-series.md
+    # also open the page in a browser
+    python render.py --cwd episodes/03-loop examples/toc.md --open
 
 Writes <input>.html next to the input: a complete page with md2html's built-in
 stylesheet (its --standalone output).
@@ -42,8 +47,8 @@ def project_dir(episode) -> Path:
         return FINISHED
     sandbox = Path(episode).resolve() / "sandbox"
     if not (sandbox / "md2html").is_dir():
-        raise SystemExit(f"[render] no md2html in {shown(sandbox)}: run the agent first "
-                         f"(python run.py --cwd {episode})")
+        raise SystemExit(f"[render] no md2html in {shown(sandbox)}: run the agent "
+                         f"first (python run.py --cwd {episode})")
     return sandbox
 
 
@@ -52,10 +57,12 @@ def render(source: Path, project: Path) -> Path:
     copy first, and write the standalone page next to the source. Returns its path."""
     output = source.with_suffix(".html")
     child_env = dict(os.environ)
-    child_env.pop("PYTHONSAFEPATH", None)   # would drop the project folder from sys.path
+    # PYTHONSAFEPATH would drop the project folder from sys.path
+    child_env.pop("PYTHONSAFEPATH", None)
     child_env["PYTHONIOENCODING"] = "utf-8"
     result = subprocess.run(
-        [sys.executable, "-m", "md2html", str(source), "--standalone", "-o", str(output)],
+        [sys.executable, "-m", "md2html", str(source),
+         "--standalone", "-o", str(output)],
         cwd=project, env=child_env,
     )
     if result.returncode != 0:
@@ -64,12 +71,15 @@ def render(source: Path, project: Path) -> Path:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Render a Markdown file with an episode's md2html.")
-    parser.add_argument("input", help="the .md file to render, e.g. examples/emoji.md")
+    parser = argparse.ArgumentParser(
+        description="Render a Markdown file with an episode's md2html.")
+    parser.add_argument("input",
+                        help="the .md file to render, e.g. examples/emoji.md")
     parser.add_argument("--cwd", metavar="EPISODE",
                         help="an episode folder; uses the md2html in its sandbox/ "
                              "(default: the finished one in examples/md2html)")
-    parser.add_argument("--open", action="store_true", help="open the page in a browser")
+    parser.add_argument("--open", action="store_true",
+                        help="open the page in a browser")
     args = parser.parse_args()
 
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")

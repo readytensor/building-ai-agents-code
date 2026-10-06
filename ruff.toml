@@ -1,0 +1,13 @@
+# Line length: 86 characters, so code fits the editor in the videos.
+# Only the length is enforced; the code keeps its own hand-wrapped style
+# (no formatter). Check with: ruff check .
+line-length = 86
+extend-exclude = [
+    "episodes/*/initial",   # the project the agent works on, as it ships
+    "episodes/*/sandbox",
+    "episodes/*/logs",
+    "eval/fixtures",
+]
+
+[lint]
+select = ["E501"]

@@ -88,7 +88,8 @@ def _exec_run(cmd: list, timeout: int) -> tuple:
     return ((proc.stdout + proc.stderr).strip(), proc.returncode)
 
 
-def exec_bash(container_id: str, command: str, runner=None, timeout: int = BASH_TIMEOUT) -> str:
+def exec_bash(container_id: str, command: str, runner=None,
+              timeout: int = BASH_TIMEOUT) -> str:
     """Run one shell command inside the container, in the repo's own
     environment (the images ship a conda env named `testbed`)."""
     # The in-container coreutils `timeout` is the real limit. Timing out the
@@ -105,7 +106,8 @@ def exec_bash(container_id: str, command: str, runner=None, timeout: int = BASH_
         return runner(cmd)
 
     output, returncode = _exec_run(cmd, timeout + 15)
-    if output is None or returncode == 124:  # 124 = `timeout` expired (killed the command)
+    # 124 = `timeout` expired (killed the command)
+    if output is None or returncode == 124:
         return (f"Error: command timed out after {timeout}s inside the container "
                 "and was killed. Avoid long-running or interactive commands; "
                 "scope test runs to the relevant files.")
@@ -121,10 +123,12 @@ def exec_bash(container_id: str, command: str, runner=None, timeout: int = BASH_
 def _fileops_source() -> str:
     """Source of the in-container file operations, read fresh so edits to
     container_fileops.py never need a process restart."""
-    return (Path(__file__).with_name("container_fileops.py")).read_text(encoding="utf-8")
+    return (Path(__file__).with_name("container_fileops.py")).read_text(
+        encoding="utf-8")
 
 
-def fileop(container_id: str, op: str, kwargs: dict, runner=None, timeout: int = 60) -> str:
+def fileop(container_id: str, op: str, kwargs: dict, runner=None,
+           timeout: int = 60) -> str:
     """Run one file operation (read/write/edit/grep/list_files) against the
     container's /testbed, by piping container_fileops.py plus a single
     dispatch call over `docker exec -i python -`. Content travels on stdin
@@ -132,7 +136,8 @@ def fileop(container_id: str, op: str, kwargs: dict, runner=None, timeout: int =
     python -- always modern -- rather than the testbed env, whose interpreter
     can be as old as the instance."""
     payload = json.dumps({"op": op, **kwargs})
-    program = _fileops_source() + f'\nprint(dispatch(json.loads({json.dumps(payload)})), end="")\n'
+    program = (_fileops_source()
+               + f'\nprint(dispatch(json.loads({json.dumps(payload)})), end="")\n')
     cmd = ["docker", "exec", "-i", container_id, "/opt/miniconda3/bin/python", "-"]
     if runner is not None:  # injectable path for tests
         return runner(cmd, program)
@@ -143,7 +148,8 @@ def fileop(container_id: str, op: str, kwargs: dict, runner=None, timeout: int =
         return f"Error: {op} timed out after {timeout}s."
     if proc.returncode:
         _check_engine(proc.stderr or proc.stdout)  # docker-level failure: crash
-        return f"Error: {op} failed in the container: {(proc.stderr or proc.stdout)[-1000:]}"
+        return (f"Error: {op} failed in the container: "
+                f"{(proc.stderr or proc.stdout)[-1000:]}")
     return proc.stdout
 
 

@@ -40,7 +40,7 @@ instance, at most `--workers` at a time, and consolidates one summary at the
 end. A killed batch resumes where it left off (completed instances are
 skipped). It takes an explicit instance list:
 
-    python -m eval.dispatch --batch my-batch-name --workers 3 --ids id1 id2 ...
+    python -m eval.dispatch --batch my-batch --workers 3 --ids id1 id2 ...
 
 The `local` provider (`--source local`) runs the series' own episode tasks
 (Eps 3-6) over each episode's pristine `initial/` md2html tree, scored by

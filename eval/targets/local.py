@@ -85,7 +85,8 @@ _EP6_TASK = """I want to round out our GFM support with three more features:
   1. Strikethrough: ~~text~~ -> <del>text</del>
   2. Task lists: list items starting with `- [ ]` or `- [x]` render
      with a disabled <input type="checkbox"> prepended (checked for [x]).
-  3. Autolinks: <https://example.com> -> <a href="https://example.com">https://example.com</a>
+  3. Autolinks: <https://example.com> -> <a href="https://example.com">\
+https://example.com</a>
 
 Add each as a new extension under md2html/extensions/ and register
 each in md2html/extensions/__init__.py. There are test fixture pairs
@@ -105,8 +106,10 @@ DEFAULT_SPECS = [
         "fail_to_pass": [
             "tests/test_renderer.py::test_fixture_pair[toc]",
             "tests/test_toc_heldout.py::test_anchor_on_every_heading_level",
-            "tests/test_toc_heldout.py::test_slug_is_lowercase_with_punctuation_stripped",
-            "tests/test_toc_heldout.py::test_duplicate_headings_get_distinct_sequential_ids",
+            ("tests/test_toc_heldout.py::"
+             "test_slug_is_lowercase_with_punctuation_stripped"),
+            ("tests/test_toc_heldout.py::"
+             "test_duplicate_headings_get_distinct_sequential_ids"),
             "tests/test_toc_heldout.py::test_marker_replaced_with_labeled_nav",
             "tests/test_toc_heldout.py::test_toc_nesting_follows_heading_levels",
             "tests/test_toc_heldout.py::test_label_is_not_a_list_entry",
@@ -118,7 +121,8 @@ DEFAULT_SPECS = [
         "id": "md2html__ep4-reference-links",
         "base": _REPO_ROOT / "episodes" / "04-working-memory" / "initial",
         "problem_statement": _EP4_TASK,
-        "fail_to_pass": ["tests/test_renderer.py::test_fixture_pair[reference_style_links]"],
+        "fail_to_pass": [
+            "tests/test_renderer.py::test_fixture_pair[reference_style_links]"],
     },
     {
         "id": "md2html__ep5-github-alerts",
@@ -174,8 +178,10 @@ def _collect_node_ids(base_dir: Path) -> list:
     at load time -- before any agent runs -- so tests an agent adds later can
     never sneak into pass_to_pass."""
     proc = subprocess.run(
-        ["python", "-m", "pytest", "tests", "--collect-only", "-q", "-p", "no:cacheprovider"],
-        cwd=base_dir, capture_output=True, text=True, encoding="utf-8", errors="replace",
+        ["python", "-m", "pytest", "tests", "--collect-only", "-q",
+         "-p", "no:cacheprovider"],
+        cwd=base_dir, capture_output=True, text=True, encoding="utf-8",
+        errors="replace",
     )
     return [line.strip() for line in proc.stdout.splitlines() if "::" in line]
 

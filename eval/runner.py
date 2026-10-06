@@ -19,13 +19,15 @@ from eval.targets import Instance, SolveFn
 # Telemetry files the agent writes to its own cwd (same recording convention as
 # the episodes). The runner moves them into the instance's results folder so
 # they are preserved per attempt instead of overwritten by the next run.
-_TELEMETRY_FILES = ("tool_calls.jsonl", "metrics.json", "final_message.md", "transcript.json",
-                    "messages.jsonl")
+_TELEMETRY_FILES = ("tool_calls.jsonl", "metrics.json", "final_message.md",
+                    "transcript.json", "messages.jsonl")
 
 
-def run_instance(instance: Instance, solve: SolveFn, batch_dir: Path, run_label: str) -> dict:
+def run_instance(instance: Instance, solve: SolveFn, batch_dir: Path,
+                 run_label: str) -> dict:
     """Materialize, solve, verify, and write verify.json + diff.patch under
-    batch_dir/run_label/. Returns a small result dict for the summary/scoreboard."""
+    batch_dir/run_label/. Returns a small result dict for the
+    summary/scoreboard."""
     inst_dir = batch_dir / run_label
     inst_dir.mkdir(parents=True, exist_ok=True)
 
@@ -33,7 +35,8 @@ def run_instance(instance: Instance, solve: SolveFn, batch_dir: Path, run_label:
         instance.prepare()  # e.g. fetch an expensive base state (cached)
     if instance.repo_dir is not None:
         work = materialize(instance.repo_dir, inst_dir / "repo")
-        scored = replace(instance, repo_dir=work)  # verify() must score the working copy
+        # verify() must score the working copy
+        scored = replace(instance, repo_dir=work)
     else:
         # Container-backed instance: the workspace is the container's own
         # /testbed; there is nothing to materialize on the host.
@@ -55,7 +58,8 @@ def run_instance(instance: Instance, solve: SolveFn, batch_dir: Path, run_label:
     elapsed = round(time.monotonic() - start, 3)
 
     (inst_dir / "diff.patch").write_text(diff, encoding="utf-8")
-    (inst_dir / "verify.json").write_text(json.dumps(verdict.to_dict(), indent=2), encoding="utf-8")
+    (inst_dir / "verify.json").write_text(json.dumps(verdict.to_dict(), indent=2),
+                                          encoding="utf-8")
 
     # Collect the agent's telemetry (if it wrote any) into this attempt's folder.
     for name in _TELEMETRY_FILES:

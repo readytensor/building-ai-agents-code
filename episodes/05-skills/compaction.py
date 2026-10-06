@@ -43,17 +43,22 @@ _TOKENIZER = get_encoding("cl100k_base")
 
 # --- Compaction knobs. Env-overridable; defaults shown below. Both are used in
 # compact(): the threshold gates on the middle's token count, KEEP sets the tail.
-COMPACTION_THRESHOLD = int(os.environ.get("COMPACTION_THRESHOLD", 25_000))  # tokens in the compactable middle before we summarize it.
-KEEP_LAST_ITERATIONS = int(os.environ.get("KEEP_LAST_ITERATIONS", 2))            # recent assistant rounds preserved uncompacted.
-SUMMARIZER_MAX_TOKENS = int(os.environ.get("SUMMARIZER_MAX_TOKENS", 50_000))  # cap on one summarizer reply. Roomy on purpose:
-# a reasoning model's hidden thinking comes out of this same budget and its length is unpredictable — a tight cap would
-# truncate healthy calls. This cap is also what bounds the summary that can enter history (one 64K "summary" once did, and
-# got re-summarized on the next fire): a reply that hits the cap is never installed — the guard in compact() skips the
+# Tokens in the compactable middle before we summarize it.
+COMPACTION_THRESHOLD = int(os.environ.get("COMPACTION_THRESHOLD", 25_000))
+# Recent assistant rounds preserved uncompacted.
+KEEP_LAST_ITERATIONS = int(os.environ.get("KEEP_LAST_ITERATIONS", 2))
+# Cap on one summarizer reply. Roomy on purpose: a reasoning model's hidden thinking
+# comes out of this same budget and its length is unpredictable — a tight cap would
+# truncate healthy calls. This cap is also what bounds the summary that can enter
+# history (one 64K "summary" once did, and got re-summarized on the next fire): a
+# reply that hits the cap is never installed — the guard in compact() skips the
 # round instead — so the worst case is a wasted call, not a poisoned history.
+SUMMARIZER_MAX_TOKENS = int(os.environ.get("SUMMARIZER_MAX_TOKENS", 50_000))
 
 SUMMARIZER_PROMPT = (
-    "You're summarizing an in-progress coding-agent transcript so the agent can keep "
-    "working with less context. Produce a concise structured summary that captures: "
+    "You're summarizing an in-progress coding-agent transcript so the agent can "
+    "keep working with less context. Produce a concise structured summary that "
+    "captures: "
     "(1) the user's original task, (2) what's been investigated so far (files read, "
     "what was found), (3) what's been changed so far (files written, edits applied), "
     "(4) what's still to do, (5) any errors encountered and how they were handled. "
@@ -63,7 +68,8 @@ SUMMARIZER_PROMPT = (
 
 
 def _format_as_transcript(messages):
-    """Render a list of message dicts as a plain-text transcript for the summarizer."""
+    """Render a list of message dicts as a plain-text transcript for the
+    summarizer."""
     out = []
     for m in messages:
         role = m.get("role", "?")
@@ -83,7 +89,8 @@ def _format_as_transcript(messages):
             # giant dump can't blow up the summarizer call. 5K chars leaves normal
             # tool results intact, so the summarizer sees ~what the agent saw — the
             # content that actually drove the compaction trigger.
-            preview = content if len(content) < 5000 else content[:5000] + "...[truncated]"
+            preview = (content if len(content) < 5000
+                       else content[:5000] + "...[truncated]")
             out.append(f"TOOL RESULT: {preview}")
         else:
             out.append(f"{role.upper()}: {content}")
@@ -136,13 +143,15 @@ def compact(messages, client, model):
     leaves `messages` untouched and hands the summary back to the caller to
     record as a fold — that's what makes this non-destructive.
     """
-    asst_positions = [i for i, m in enumerate(messages) if m.get("role") == "assistant"]
+    asst_positions = [i for i, m in enumerate(messages)
+                      if m.get("role") == "assistant"]
     if len(asst_positions) <= KEEP_LAST_ITERATIONS:
         return None, 0, 0, 0, 0
     head = messages[:2]                            # system + original user task
     tail_start = asst_positions[-KEEP_LAST_ITERATIONS]
     middle = messages[2:tail_start]
-    tail_len = len(messages) - tail_start          # the fold keeps this many newest messages
+    # The fold keeps this many newest messages.
+    tail_len = len(messages) - tail_start
     if not middle:
         return None, 0, 0, 0, 0
 
@@ -186,4 +195,5 @@ def compact(messages, client, model):
             "[End of summary. Continue with the most recent turns.]"
         ),
     }
-    return summary_msg, tail_len, su.prompt_tokens, su.completion_tokens, middle_tokens
+    return (summary_msg, tail_len, su.prompt_tokens, su.completion_tokens,
+            middle_tokens)

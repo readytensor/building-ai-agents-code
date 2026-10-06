@@ -13,9 +13,9 @@ tool-call count vary from one run to the next on the same task.
 The episodes stay self-contained — `python agent.py` still works on its own.
 run.py is just the outer harness; it can run any episode.
 
-    python ../../run.py                       # run agent.py in the current folder
-    python run.py --cwd episodes/03-loop       # run a specific episode from the repo root
-    python ../../run.py --capture             # also record terminal output
+    python ../../run.py                    # run agent.py in the current folder
+    python run.py --cwd episodes/03-loop   # run an episode from the repo root
+    python ../../run.py --capture          # also record terminal output
 """
 import argparse
 import contextlib
@@ -31,7 +31,8 @@ from pathlib import Path
 # render them on every platform (Windows consoles default to cp1252).
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-import capture  # noqa: E402  sibling module; sys.path[0] is run.py's folder, so this resolves
+# A sibling module: sys.path[0] is run.py's folder, so this resolves.
+import capture  # noqa: E402
 
 
 def make_run_dir(logs_dir: Path) -> Path:
@@ -74,7 +75,8 @@ def render_single_agent(a: dict) -> None:
     print(f"agent calls:        iterations={a['iterations']}  "
           f"input={a['input_tokens']:,}  output={a['output_tokens']:,}")
     if "cache_write" in a or "cache_read" in a:
-        print(f"cache:              write={a.get('cache_write', 0):,}  read={a.get('cache_read', 0):,}")
+        print(f"cache:              write={a.get('cache_write', 0):,}  "
+              f"read={a.get('cache_read', 0):,}")
     print(f"TOTAL:              input={a['input_tokens']:,}  "
           f"output={a['output_tokens']:,}  "
           f"grand_total={a['input_tokens'] + a['output_tokens']:,}")
@@ -82,14 +84,16 @@ def render_single_agent(a: dict) -> None:
     per_iter = a.get("per_iter")
     if per_iter:
         def _fmt(p):
-            if isinstance(p, dict):  # dict format (Ep 3+); tolerate old in/out names too
+            # dict format (Ep 3+); tolerate old in/out names too
+            if isinstance(p, dict):
                 mi = p.get("model_in", p.get("in"))
                 mo = p.get("model_out", p.get("out"))
                 to = p.get("tools_out", p.get("tool_out"))
                 t = f"/{to}" if to is not None else ""
                 return f"{mi}/{mo}{t}"
             return f"{p[0]}/{p[1]}"  # legacy [in, out] format
-        print("per-iteration model_in/model_out/tools_out: " + " → ".join(_fmt(p) for p in per_iter))
+        print("per-iteration model_in/model_out/tools_out: "
+              + " → ".join(_fmt(p) for p in per_iter))
 
     r = a.get("reasoning")
     if r:
@@ -115,16 +119,20 @@ def render_multi_agent(agents: list) -> None:
     for a in agents:
         print(f"\n[{a['label']}]")
         print(f"  iterations:     {a['iterations']}")
-        print(f"  tokens:         in={a['input_tokens']:,}  out={a['output_tokens']:,}")
+        print(f"  tokens:         in={a['input_tokens']:,}  "
+              f"out={a['output_tokens']:,}")
         if "cache_write" in a or "cache_read" in a:
-            print(f"  cache:          write={a.get('cache_write', 0):,}  read={a.get('cache_read', 0):,}")
+            print(f"  cache:          write={a.get('cache_write', 0):,}  "
+                  f"read={a.get('cache_read', 0):,}")
         r = a.get("reasoning")
         if r:
-            print(f"  reasoning:      plan_writes={r.get('write_plan', 0)}  think={r.get('think', 0)}")
+            print(f"  reasoning:      plan_writes={r.get('write_plan', 0)}  "
+                  f"think={r.get('think', 0)}")
         s = a.get("skills")
         if s:
             print(f"  skills:         list_calls={s.get('list_skills', 0)}  "
-                  f"load_calls={s.get('load_skill', 0)}  loaded={s.get('loaded') or 'none'}")
+                  f"load_calls={s.get('load_skill', 0)}  "
+                  f"loaded={s.get('loaded') or 'none'}")
         if "delegate_calls" in a:
             print(f"  delegate calls: {a['delegate_calls']}")
         if a.get("server_tool_calls"):
@@ -194,9 +202,11 @@ def print_tool_call_summary(tool_calls_path: Path) -> None:
         per_agent = {}
         for call in calls:
             per_agent.setdefault(call.get("agent", "?"), []).append(call["tool"])
-        print(f"{plural(len(calls), 'call')} across {plural(len(per_agent), 'agent')}")
+        print(f"{plural(len(calls), 'call')} "
+              f"across {plural(len(per_agent), 'agent')}")
         for agent_label, tools in per_agent.items():
-            print(f"  {agent_label}: {plural(len(tools), 'call')} — {breakdown(tools)}")
+            print(f"  {agent_label}: {plural(len(tools), 'call')} "
+                  f"— {breakdown(tools)}")
     else:
         tools = [call["tool"] for call in calls]
         print(f"{plural(len(calls), 'call')} — {breakdown(tools)}")
@@ -234,10 +244,14 @@ def append_summary_to_capture(run_dir: Path, text: str) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run an episode's agent as a fresh, recorded run.")
-    parser.add_argument("--cwd", default=".", help="episode directory to run in (default: current)")
-    parser.add_argument("--logdir", default=None, help="where run folders are created (default: <cwd>/logs)")
-    parser.add_argument("--capture", action="store_true", help="also record terminal output into the run folder")
+    parser = argparse.ArgumentParser(
+        description="Run an episode's agent as a fresh, recorded run.")
+    parser.add_argument("--cwd", default=".",
+                        help="episode directory to run in (default: current)")
+    parser.add_argument("--logdir", default=None,
+                        help="where run folders are created (default: <cwd>/logs)")
+    parser.add_argument("--capture", action="store_true",
+                        help="also record terminal output into the run folder")
     parser.add_argument(
         "-g", "--grade", action="store_true",
         help="after the run, run the episode's grade.py and record its output "
@@ -304,8 +318,11 @@ def main() -> int:
                 [sys.executable, "grade.py"], cwd=cwd,
                 capture_output=True, text=True, encoding="utf-8", errors="replace",
             )
-            grade_output = graded.stdout + (("\n" + graded.stderr) if graded.stderr.strip() else "")
-            print(grade_output, end="" if grade_output.endswith("\n") else "\n", flush=True)
+            grade_output = graded.stdout
+            if graded.stderr.strip():
+                grade_output += "\n" + graded.stderr
+            end = "" if grade_output.endswith("\n") else "\n"
+            print(grade_output, end=end, flush=True)
             (run_dir / "grade.log").write_text(grade_output, encoding="utf-8")
             # Also append the verdict to the captured terminal files (same as the
             # end-of-run summaries), so terminal.log tells the whole story and

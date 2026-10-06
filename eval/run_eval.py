@@ -2,9 +2,12 @@
 
     python -m eval.run_eval --source local --n 5 --repeat 3
     python -m eval.run_eval --source local --id md2html__alerts
-    python -m eval.run_eval --source local --agent fake-fixing --n 1   # token-free smoke
-    python -m eval.run_eval --source swebench --n 5   # grades each sample as it lands (--no-grade to skip)
-    python -m eval.run_eval --source swebench --n 20 --stratified   # proportional easy/medium/hard mix
+    python -m eval.run_eval --source local --agent fake-fixing --n 1
+        # token-free smoke
+    python -m eval.run_eval --source swebench --n 5
+        # grades each sample as it lands (--no-grade to skip)
+    python -m eval.run_eval --source swebench --n 20 --stratified
+        # proportional easy/medium/hard mix
 
 The agent-under-test is selectable: `--agent ep5` (default, the real reference
 agent) or a fake adapter for token-free testing. Providers supply instances;
@@ -17,7 +20,8 @@ from datetime import datetime
 from pathlib import Path
 
 from eval.fake_agents import fixing_solver, noop_solver
-from eval.results import aggregate, append_scoreboard, apply_retention, write_manifest, write_summary
+from eval.results import (aggregate, append_scoreboard, apply_retention,
+                          write_manifest, write_summary)
 from eval.runner import run_instance
 from eval.sampling import filter_pool, sample, stratified_sample
 
@@ -47,7 +51,8 @@ def _select_agent(name):
     if name == "fake-noop":
         return noop_solver, "fake-noop", "(fake)"
     if name == "ep5":
-        from eval.agent import MODEL, solve  # imported lazily: only the real run needs it
+        # imported lazily: only the real run needs it
+        from eval.agent import MODEL, solve
         return solve, "ep5", MODEL
     raise SystemExit(f"unknown agent: {name}")
 
@@ -88,7 +93,8 @@ def _agent_git_sha():
 
 
 def main(argv=None):
-    p = argparse.ArgumentParser(description="Run the reference agent over a pool of problems.")
+    p = argparse.ArgumentParser(
+        description="Run the reference agent over a pool of problems.")
     p.add_argument("--source", default="local", choices=["local", "swebench"])
     p.add_argument("--agent", default="ep5", help="ep5 | fake-fixing | fake-noop")
     p.add_argument("--n", type=int, default=1)
@@ -96,7 +102,8 @@ def main(argv=None):
     p.add_argument("--id", dest="instance_id", default=None)
     p.add_argument("--difficulty", choices=["easy", "medium", "hard"], default=None,
                    help="filter by Verified's time-to-fix bucket before sampling")
-    p.add_argument("--repo", default=None, help="filter by repo substring, e.g. flask")
+    p.add_argument("--repo", default=None,
+                   help="filter by repo substring, e.g. flask")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--stratified", action="store_true",
                    help="spread --n across the difficulty buckets in proportion "
@@ -108,15 +115,18 @@ def main(argv=None):
                         "grade -> next sample), so a broken setup surfaces after the "
                         "first sample, not after the whole batch. Default: ON for "
                         "swebench (--no-grade opts out); unavailable for local.")
-    p.add_argument("--clean-images", action=argparse.BooleanOptionalAction, default=None,
-                   help="remove each instance's Docker image once the sample is fully "
-                        "done (solved + graded), so batch disk use stays at the "
-                        "in-flight set instead of growing per sample. Default: ON for "
-                        "swebench (--no-clean-images keeps images, e.g. to re-enter a "
-                        "container while debugging); unavailable for local.")
+    p.add_argument("--clean-images", action=argparse.BooleanOptionalAction,
+                   default=None,
+                   help="remove each instance's Docker image once the sample is "
+                        "fully done (solved + graded), so batch disk use stays at "
+                        "the in-flight set instead of growing per sample. Default: "
+                        "ON for swebench (--no-clean-images keeps images, e.g. to "
+                        "re-enter a container while debugging); "
+                        "unavailable for local.")
     p.add_argument("--keep", choices=["none", "failures", "all"], default="failures")
     p.add_argument("--results-root", default="eval/results")
-    p.add_argument("--timestamp", default=None, help="override batch id (tests use this)")
+    p.add_argument("--timestamp", default=None,
+                   help="override batch id (tests use this)")
     args = p.parse_args(argv)
 
     solve, agent_label, model_label = _select_agent(args.agent)
@@ -127,11 +137,14 @@ def main(argv=None):
         raise SystemExit("--stratified samples a pool; it can't be combined "
                          "with --id")
     if args.grade and args.source != "swebench":
-        raise SystemExit("--grade needs --source swebench (official grading only exists there)")
-    if args.grade is None:  # unset: official verdicts are the default where they exist
+        raise SystemExit("--grade needs --source swebench "
+                         "(official grading only exists there)")
+    # unset: official verdicts are the default where they exist
+    if args.grade is None:
         args.grade = args.source == "swebench"
     if args.clean_images and args.source != "swebench":
-        raise SystemExit("--clean-images needs --source swebench (only its instances have images)")
+        raise SystemExit("--clean-images needs --source swebench "
+                         "(only its instances have images)")
     if args.clean_images is None:  # unset: cleanup is the default where images exist
         args.clean_images = args.source == "swebench"
     instances = filter_pool(_load_instances(args.source),
@@ -142,9 +155,11 @@ def main(argv=None):
         except ValueError as e:
             raise SystemExit(str(e))
     else:
-        picked = sample(instances, n=args.n, seed=args.seed, instance_id=args.instance_id)
+        picked = sample(instances, n=args.n, seed=args.seed,
+                        instance_id=args.instance_id)
     if not picked:
-        raise SystemExit("no instances selected (check --id / --difficulty / --repo)")
+        raise SystemExit(
+            "no instances selected (check --id / --difficulty / --repo)")
 
     results_root = Path(args.results_root)
     stamp = args.timestamp or datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -156,7 +171,8 @@ def main(argv=None):
     # still leaves a record of what ran and how it scored so far.
     write_manifest(batch_dir, {
         "timestamp": stamp, "agent": agent_label, "agent_git_sha": _agent_git_sha(),
-        "model": model_label, "source": args.source, "n": args.n, "repeat": args.repeat,
+        "model": model_label, "source": args.source, "n": args.n,
+        "repeat": args.repeat,
         "seed": args.seed, "stratified": args.stratified,
         "filters": {"difficulty": args.difficulty, "repo": args.repo},
         "instance_ids": [i.id for i in picked],
@@ -165,7 +181,8 @@ def main(argv=None):
     def _score_of_record(rows):
         # With --grade the official verdicts are the numbers of record; without
         # it, swebench rows stay explicitly ungraded (local pytest is env-noise).
-        return [dict(r, passed=r["official_resolved"]) for r in rows] if args.grade else rows
+        return ([dict(r, passed=r["official_resolved"]) for r in rows]
+                if args.grade else rows)
 
     results = []
     for inst in picked:
@@ -174,7 +191,8 @@ def main(argv=None):
             print(f"[eval] {label}", flush=True)
             result = run_instance(inst, solve, batch_dir, run_label=label)
             if args.grade:
-                result["official_resolved"] = _grade_now(batch_dir / label, model_label)
+                result["official_resolved"] = _grade_now(batch_dir / label,
+                                                         model_label)
             results.append(result)
             scored = _score_of_record(results)
             write_summary(batch_dir, aggregate(scored, repeat=args.repeat), scored)
@@ -187,7 +205,8 @@ def main(argv=None):
     agg = aggregate(results, repeat=args.repeat)
     write_summary(batch_dir, agg, results)
     append_scoreboard(results_root, {
-        "timestamp": stamp, "agent": agent_label, "model": model_label, "source": args.source,
+        "timestamp": stamp, "agent": agent_label, "model": model_label,
+        "source": args.source,
         "n": len(picked), "repeat": args.repeat, "seed": args.seed,
         # Local pytest is only meaningful for the local provider; swebench rows
         # are ungraded unless --grade ran official grading per sample.
@@ -198,7 +217,8 @@ def main(argv=None):
     })
     apply_retention(batch_dir, results, keep=args.keep)
 
-    print(f"[eval] pass@1={agg['pass_at_1']:.1%}  pass@k={agg['pass_at_k']:.1%}  -> {batch_dir}", flush=True)
+    print(f"[eval] pass@1={agg['pass_at_1']:.1%}  pass@k={agg['pass_at_k']:.1%}  "
+          f"-> {batch_dir}", flush=True)
     return 0
 
 
