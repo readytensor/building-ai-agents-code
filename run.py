@@ -16,6 +16,7 @@ run.py is just the outer harness; it can run any episode.
     python ../../run.py                    # run agent.py in the current folder
     python run.py --cwd episodes/03-loop   # run an episode from the repo root
     python ../../run.py --capture          # also record terminal output
+    python ../../run.py --keep-sandbox     # also keep the sandbox the run left
 """
 import argparse
 import contextlib
@@ -258,6 +259,11 @@ def main() -> int:
              "in the run folder (grade.log)",
     )
     parser.add_argument(
+        "--keep-sandbox", action="store_true",
+        help="also copy the sandbox, as the agent left it, into the run folder "
+             "(off by default: a batch of runs would pile up copies of the project)",
+    )
+    parser.add_argument(
         "--collect", action="append", default=None,
         help="agent output file(s) to move into the run folder "
              "(default: tool_calls.jsonl, metrics.json, messages.jsonl)",
@@ -293,10 +299,11 @@ def main() -> int:
             shutil.move(str(produced), str(run_dir / name))
             print(f"[run] collected {name}", flush=True)
 
-    # Keep the sandbox as the agent left it, too: the next run wipes it, and the
-    # work itself (not only the log of making it) is what a comparison needs.
+    # --keep-sandbox: also keep the sandbox as the agent left it. The next run
+    # wipes it, and a comparison needs the work itself, not only the log of
+    # making it. Off by default: a batch of runs would pile up copies.
     sandbox = cwd / "sandbox"
-    if sandbox.exists():
+    if args.keep_sandbox and sandbox.exists():
         shutil.copytree(sandbox, run_dir / "sandbox",
                         ignore=shutil.ignore_patterns("__pycache__", ".pytest_cache"))
         print("[run] collected sandbox/", flush=True)

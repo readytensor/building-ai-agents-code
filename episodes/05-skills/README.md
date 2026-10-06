@@ -44,8 +44,11 @@ it knows, which the held-out dash rules fail.
 **Run** (from the repo root):
 
 ```bash
-python run.py --cwd episodes/05-skills --capture --grade
+python run.py --cwd episodes/05-skills --capture --grade --keep-sandbox
 ```
+
+`--keep-sandbox` copies the sandbox the run left into its run folder, so the two
+runs of the comparison can both be rendered afterwards.
 
 Then try the new feature on a real document:
 
