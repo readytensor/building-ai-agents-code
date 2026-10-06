@@ -317,7 +317,5 @@ def fetch_url(url: str, save_to: str = "") -> str:
     return text
 
 
-# --- Tool registry: name -> callable, plus the list of schemas for the LLM.
+# --- Tool registry: the tools the agent gets; run_agent builds the lookup and schemas.
 TOOLS = [bash, list_files, read, write, edit, grep, web_search, fetch_url]
-TOOLS_BY_NAME = {t.__name__: t for t in TOOLS}
-TOOL_DEFS = [t.tool_definition for t in TOOLS]

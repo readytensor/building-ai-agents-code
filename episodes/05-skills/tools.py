@@ -255,9 +255,7 @@ def grep(pattern: str, path: str = ".") -> str:
     return "\n".join(results) if results else f"No matches for {pattern!r}."
 
 
-# --- Tool registry: name -> callable, plus the list of schemas for the LLM.
+# --- Tool registry: the tools the agent gets; run_agent builds the lookup and schemas.
 # Ep 4 extends this with the planning tool in agent.py (TOOLS + [write_plan]);
 # these six are the carried-forward base.
 TOOLS = [bash, list_files, read, write, edit, grep]
-TOOLS_BY_NAME = {t.__name__: t for t in TOOLS}
-TOOL_DEFS = [t.tool_definition for t in TOOLS]
