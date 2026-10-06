@@ -1,7 +1,8 @@
 # Skills
 
-**Concept:** instructions the agent loads when it needs them, instead of carrying
-every procedure in its system prompt on every call.
+**Concept:** knowledge the agent loads when it needs it, instead of carrying it in the
+system prompt on every call. A skill holds what the model cannot know on its own:
+the team's rules, how its project is extended, how it finishes work.
 
 **Additions on top of Tools:** `skills.py` and a `.skills/` library. A skill is a
 folder with a `SKILL.md`: a name, a one-line description of when it applies, and a
@@ -10,14 +11,19 @@ at startup, so the model knows what it can load; `load_skill(name)` returns the 
 as a tool result, and only then is it in context. An unused skill costs one line.
 The loop itself is unchanged from Tools.
 
-The library holds three general skills, written for any codebase (the same agent
-later runs on SWE-bench): `implementing-a-feature`, `verification`, `fixing-a-bug`.
-On this episode's task the first two load, at the start and before the finish; the
-third stays unloaded.
+The library holds three skills, each for a reason the model could not supply itself:
+`house-typography` (the team's style guide: rules that differ from common defaults
+and are written nowhere else), `md2html-extensions` (how the project is extended:
+hooks, registry, tests), and `verification` (how the team checks finished work).
 
-**The task:** GitHub-flavored alerts (`> [!NOTE]` and the other four types) as a new
-md2html extension. The fixture pair `initial/tests/fixtures/github_alerts.md` /
-`github_alerts.html` shows the expected output and fails until the feature exists.
+**The task:** typographic punctuation (curly quotes, en and em dashes, the ellipsis)
+as a new md2html extension, "following the team's style guide". The guide is the
+skill. There is no fixture pair for this task: the rules are the knowledge the run
+had or did not have. `held_out/` holds the grader's tests of each rule.
+
+**The comparison:** the same task runs twice, once with `.skills/` empty and once with
+the library, nothing else changed. Without the guide the model applies the defaults
+it knows, which the held-out dash rules fail.
 
 **Code:**
 - `skills.py` (**this episode's addition**): `skills_index`, `load_skill`, and the
@@ -32,19 +38,19 @@ md2html extension. The fixture pair `initial/tests/fixtures/github_alerts.md` /
 - `tools.py`: carried forward from Tools unchanged
 - `grade.py` and `held_out/`: tests the agent never sees, run against the sandbox
   after a run (`python grade.py` from this folder)
-- `initial/`: `md2html` with its README and the alerts fixture pair
+- `initial/`: `md2html` with its README, as Tools left it
 - `sandbox/`: gitignored, recreated on every run
 
 **Run** (from the repo root):
 
 ```bash
-python run.py --cwd episodes/05-skills
+python run.py --cwd episodes/05-skills --capture --grade
 ```
 
 Then try the new feature on a real document:
 
 ```bash
-python render.py --cwd episodes/05-skills examples/alerts.md --open
+python render.py --cwd episodes/05-skills examples/typography.md --open
 ```
 
 **Full context:**

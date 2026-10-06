@@ -40,7 +40,7 @@ def skills_index() -> str:
     for skill_md in sorted(SKILLS_DIR.glob("*/SKILL.md")):
         meta, _ = parse_skill(skill_md)
         lines.append(f"- {skill_md.parent.name}: {meta['description']}")
-    return "\n".join(lines)
+    return "\n".join(lines) or "(no skills installed)"
 
 
 @tool(

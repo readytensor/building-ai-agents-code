@@ -96,7 +96,7 @@ building-ai-agents-code/
 ├── examples/
 │   ├── md2html/             # the FINISHED tool, every feature
 │   ├── about-the-series.md  # a sample that uses every feature
-│   └── toc.md, emoji.md, alerts.md  # one sample per feature the agent builds
+│   └── toc.md, emoji.md, typography.md  # one sample per feature the agent builds
 ├── eval/                # evaluation: SWE-bench Verified + episode tasks
 ├── run.py               # optional harness that records a run
 ├── render.py            # render Markdown with an episode's md2html

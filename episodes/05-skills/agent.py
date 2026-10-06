@@ -61,26 +61,19 @@ SYSTEM = (Path(__file__).parent / "system_prompt.md").read_text(encoding="utf-8"
 # The skills index closes the prompt: one line per skill, so the model knows what
 # it can load without any skill's body in context yet.
 SYSTEM += "\n## Available skills\n\n" + skills_index() + "\n"
-# The task: a real feature for md2html. The fixture pair in initial/tests/fixtures/
-# (github_alerts.md, github_alerts.html) shows the expected output and fails until
-# the feature exists.
-TASK = """Our users write GitHub-flavored alerts in their documents, and md2html
-renders them as ordinary blockquotes. Add an alerts extension to md2html:
+# The task: a real feature for md2html, whose rules are the team's, not the
+# model's: the style guide is a skill, and nothing in the repository states it.
+TASK = """Our documents are typed with straight quotes, plain hyphens and three
+dots, and our style guide asks for typographic punctuation in the rendered
+HTML: curly quotes, proper dashes, the ellipsis character. Add a typography
+extension to md2html that applies the team's style guide for punctuation to
+the text of a document, exactly as the guide states it:
 
-- A blockquote whose first line is exactly [!NOTE], [!TIP], [!IMPORTANT],
-  [!WARNING] or [!CAUTION] becomes an alert: a div with the classes
-  markdown-alert and markdown-alert-<type>, a title paragraph naming the type,
-  then the rest of the blockquote as its content, rendered as usual.
-- The marker is the whole first line. A blockquote with anything else on its
-  first line, or with an unknown type such as [!DANGER], stays an ordinary
-  blockquote.
+- Nothing changes inside code spans, code blocks, or link addresses.
 - Implement it as a new extension under md2html/extensions/, registered like
   the existing ones.
 
-I've added a fixture pair at tests/fixtures/github_alerts.md and
-tests/fixtures/github_alerts.html showing the expected output; it currently
-fails. Make it pass, add your own tests, and make sure the existing tests
-still pass too."""
+Add tests for the rules, and make sure the existing tests still pass too."""
 
 # --- Usage telemetry: token counts per run, recorded by run_agent as it goes.
 # The agent only RECORDS (to metrics.json); the harness (run.py) RENDERS the
