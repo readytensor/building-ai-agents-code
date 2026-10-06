@@ -51,8 +51,8 @@ model decides what commands to run, so treat every run as untrusted.
 
 Following along with the episode tasks as written is low risk, and that is how we run
 it. If you point the agent at your own tasks, your own repositories, or open-ended
-experiments, run it inside a Docker container or a throwaway VM, not directly on a
-machine you care about. Real agent products solve this with OS-level sandboxes and
+experiments, run it inside a Docker container or a virtual machine, kept apart from
+the rest of your computer. Real agent products solve this with OS-level sandboxes and
 containers; that layer is out of scope for this series on purpose.
 
 ## Quickstart
