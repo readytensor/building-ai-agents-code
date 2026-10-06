@@ -1,5 +1,10 @@
 # eval/ - reference-agent evaluation
 
+> **Being redesigned** with the benchmark episodes. This harness was built on the
+> earlier `episodes/05-skills` (compaction, planning, `list_skills`); that episode was
+> rebuilt on 2026-10-06, so the imports in `eval/agent.py` and the prompt drift test
+> fail until the redesign lands.
+
 Runs the reference coding agent over a pool of problems and reports how often it
 resolves them, so we can see that it generalizes beyond any single example.
 

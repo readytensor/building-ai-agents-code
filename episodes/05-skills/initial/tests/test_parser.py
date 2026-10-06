@@ -10,10 +10,10 @@ from __future__ import annotations
 
 from md2html.extensions import default_extensions
 from md2html.lexer import Lexer
-from md2html.parser import ASTNode, Parser
+from md2html.parser import Node, Parser
 
 
-def _parse(source: str, extensions=None) -> ASTNode:
+def _parse(source: str, extensions=None) -> Node:
     tokens = Lexer(source, extensions=extensions or []).tokenize()
     return Parser(tokens, extensions=extensions or []).parse()
 

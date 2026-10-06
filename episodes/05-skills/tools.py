@@ -1,29 +1,33 @@
 """
-Episode 5 — Skills (tools)
+Tools
 
-The agent's action space — carried forward from Ep 4 unchanged: the same six
-general primitives (bash, list_files, read, write, edit, grep) plus the tiny
-@tool decorator that builds each tool's JSON-schema from its signature.
+The agent's action space: general primitives for files (bash, list_files,
+read, write, edit, grep) and the web (web_search, fetch_url), plus a tiny
+@tool decorator (~25 lines) that builds each tool's JSON-schema definition
+from its Python signature. Every file path resolves inside SANDBOX.
+`list_files` is a cross-platform alternative to shell find/ls/dir, so
+navigation doesn't depend on the host shell.
 
-Ep 5's skill system (list_skills, load_skill, and the skill-provided tools)
-lives in skills.py; Ep 4's write_plan tool lives in planning.py — not here.
-This file is identical to Ep 4's tools.py: the file primitives don't change.
-
-As in Ep 4, the tools live here, separate from the agent loop, and import
-nothing from agent.py (one-way `agent → tools`). Every tool resolves paths
-inside SANDBOX, defined here; agent.py owns the sandbox *reset*.
+From this episode on the tools live here, separate from the agent loop. Later
+episodes add tools to this file; agent.py imports the registry and rarely
+changes. agent.py owns the sandbox *reset* — this file just names the dir.
 
 See ../../README.md for context.
 """
 import functools
+import html as html_module
 import inspect
 import json
 import os
 import re
 import signal
 import subprocess
+import urllib.error
+import urllib.parse
+import urllib.request
 from pathlib import Path
 from typing import get_type_hints
+from urllib.parse import parse_qs, unquote, urlparse
 
 # The working directory every tool is bounded to. agent.py resets it to a clean
 # copy of initial/ at the start of each run.
@@ -110,7 +114,7 @@ def bash(command: str) -> str:
         command, shell=True,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
         cwd=SANDBOX, encoding="utf-8", errors="replace",
-        # POSIX: own group so we can kill the whole tree
+        # POSIX: own process group, so we can kill the whole tree
         start_new_session=(os.name != "nt"),
     )
     try:
@@ -124,10 +128,9 @@ def bash(command: str) -> str:
             "directory."
         )
     output = (output or "").strip()
-    # Cap transcript growth from chatty commands.
-    if len(output) > 20_000:
-        output = output[:20_000] + "\n...[truncated]"
-    if proc.returncode:                      # surface failures so the model can adapt
+    if len(output) > 50_000:  # cap transcript growth from chatty commands
+        output = output[:50_000] + "\n...[truncated]"
+    if proc.returncode:       # surface failures so the model can adapt
         output += f"\n(exit code {proc.returncode})"
     return output or "(no output)"
 
@@ -169,9 +172,10 @@ SKIP_DIRS = {"__pycache__", ".pytest_cache", ".git", ".venv", ".ruff_cache",
              "build", "dist", "node_modules", ".tox", ".eggs"}
 
 
-@tool("List files under a path (recursive), one relative path per line — a "
-      "reliable cross-platform alternative to shell find/ls/dir. Skips caches and "
-      "VCS dirs.")
+@tool(
+    "List files under a path (recursive), one relative path per line — a reliable "
+    "cross-platform alternative to shell find/ls/dir. Skips caches and VCS dirs."
+)
 def list_files(path: str = ".") -> str:
     sandbox = SANDBOX.resolve()
     root = _safe_path(path)
@@ -187,15 +191,17 @@ def list_files(path: str = ".") -> str:
     return "\n".join(files) if files else "(no files)"
 
 
-@tool("Read a file's contents, prefixed with line numbers. For large files, pass "
-      "offset (1-based line to start at) and limit (max lines) to read just a slice "
-      "instead of the whole file.")
+@tool(
+    "Read a file's contents, prefixed with line numbers. For large files, pass "
+    "offset (1-based line to start at) and limit (max lines) to read just a slice "
+    "instead of the whole file."
+)
 def read(path: str, offset: int = 1, limit: int = 0) -> str:
     p = _safe_path(path)
     if not p.exists():
         return f"Error: {path} does not exist."
     if p.is_dir():
-        return f"Error: {path} is a directory. Use bash to list its contents."
+        return f"Error: {path} is a directory. Use list_files to see its contents."
     lines = p.read_text(encoding="utf-8", errors="replace").splitlines()
     # Number the whole file before slicing, so a slice keeps its real line
     # numbers (line 200 is still labeled 200) and matches grep/traceback output.
@@ -207,13 +213,15 @@ def read(path: str, offset: int = 1, limit: int = 0) -> str:
         return (f"Error: {path} has {len(lines)} lines; "
                 f"offset {offset} is past the end.")
     if len(selected) < len(lines):
-        selected.append(f"(showing lines {start + 1}-{start + len(selected)} "
-                        f"of {len(lines)})")
+        shown = f"{start + 1}-{start + len(selected)}"
+        selected.append(f"(showing lines {shown} of {len(lines)})")
     return "\n".join(selected)
 
 
-@tool("Write content to a file, overwriting any existing content. "
-      "Creates parent directories.")
+@tool(
+    "Write content to a file, overwriting any existing content. Creates parent "
+    "directories."
+)
 def write(path: str, content: str) -> str:
     p = _safe_path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
@@ -221,9 +229,11 @@ def write(path: str, content: str) -> str:
     return f"Wrote {len(content)} bytes to {path}."
 
 
-@tool("Replace old_string with new_string in a file. Replaces a single occurrence "
-      "and errors if old_string isn't unique; pass replace_all=true to replace every "
-      "occurrence (e.g. renaming a symbol).")
+@tool(
+    "Replace old_string with new_string in a file. Replaces a single occurrence "
+    "and errors if old_string isn't unique; pass replace_all=true to replace every "
+    "occurrence (e.g. renaming a symbol)."
+)
 def edit(path: str, old_string: str, new_string: str,
          replace_all: bool = False) -> str:
     p = _safe_path(path)
@@ -237,14 +247,16 @@ def edit(path: str, old_string: str, new_string: str,
         return f"Error: old_string not found in {path}."
     if count > 1 and not replace_all:
         return (f"Error: old_string appears {count} times in {path}; pass "
-                "replace_all=true to replace all, or add more context to make it "
-                "unique.")
+                "replace_all=true to replace all, or add more context to make "
+                "it unique.")
     p.write_text(text.replace(old_string, new_string), encoding="utf-8")
     return f"Replaced {count} occurrence(s) in {path}."
 
 
-@tool("Search for a regex pattern under a path. Returns matches as "
-      "relative/path:line: text. Skips caches and VCS dirs.")
+@tool(
+    "Search for a regex pattern under a path. Returns matches as "
+    "relative/path:line: text. Skips caches and VCS dirs."
+)
 def grep(pattern: str, path: str = ".") -> str:
     try:
         regex = re.compile(pattern)
@@ -266,15 +278,82 @@ def grep(pattern: str, path: str = ".") -> str:
                     rel = f.relative_to(sandbox)
                     results.append(f"{rel}:{i}: {line[:200]}")
                     if len(results) >= 50:
-                        return ("\n".join(results)
-                                + "\n... (truncated at 50 matches)")
+                        return "\n".join(results) + "\n... (truncated at 50 matches)"
         except Exception:
             continue  # skip binary / unreadable
     return "\n".join(results) if results else f"No matches for {pattern!r}."
 
 
+# --- The web tools: what the model can't know from its training or the repo.
+@tool(
+    "Search the web for information you don't have: a project's documentation, an "
+    "official list, a data file. Returns the top results as title, URL and "
+    "snippet; then use fetch_url on the most authoritative one."
+)
+def web_search(query: str, max_results: int = 5) -> str:
+    # Keyless search through DuckDuckGo's HTML endpoint, scraped with two
+    # regexes: fine for a teaching agent, not a production search client.
+    browser_ua = (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/120.0 Safari/537.36"
+    )
+    try:
+        req = urllib.request.Request(
+            "https://html.duckduckgo.com/html/",
+            data=urllib.parse.urlencode({"q": query}).encode(),
+            headers={"User-Agent": browser_ua},
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:  # noqa: S310
+            body = resp.read().decode("utf-8", errors="replace")
+    except Exception as e:
+        return f"Error searching for {query!r}: {e}"
+
+    def strip_tags(s: str) -> str:
+        return html_module.unescape(re.sub(r"<[^>]+>", "", s)).strip()
+
+    def real_url(href: str) -> str:
+        # DuckDuckGo wraps each target as //duckduckgo.com/l/?uddg=<encoded-url>.
+        params = parse_qs(urlparse(href).query)
+        return unquote(params["uddg"][0]) if params.get("uddg") else href
+
+    links = re.findall(r'<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>',
+                       body, re.DOTALL)
+    snippets = re.findall(r'class="result__snippet"[^>]*>(.*?)</a>', body, re.DOTALL)
+    results = []
+    for i, (href, title) in enumerate(links[:max_results]):
+        snippet = strip_tags(snippets[i]) if i < len(snippets) else ""
+        result = f"{strip_tags(title)}\n  {real_url(href)}\n  {snippet}"
+        results.append(result.rstrip())
+    return "\n\n".join(results) if results else f"No results for {query!r}."
+
+
+@tool(
+    "Download a web page or file. With save_to (a path in the working directory) "
+    "the whole file is saved there, at any size, and only its size and first lines "
+    "come back: use this for data files and long lists. Without save_to, the body "
+    "comes back as text, cut at 50,000 characters."
+)
+def fetch_url(url: str, save_to: str = "") -> str:
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "md2html-agent/1.0"})
+        with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310
+            body = resp.read()
+    except urllib.error.HTTPError as e:
+        return f"HTTP {e.code} fetching {url}: {e.reason}"
+    except Exception as e:
+        return f"Error fetching {url}: {e}"
+    text = body.decode("utf-8", errors="replace")
+    if save_to:  # a big file goes to disk, not into the context
+        p = _safe_path(save_to)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(body)
+        return f"Saved {len(body):,} bytes to {save_to}. It begins:\n{text[:500]}"
+    if len(text) > 50_000:  # cap transcript growth from big pages
+        return text[:50_000] + (f"\n...[truncated; full length {len(text):,} chars. "
+                                "Pass save_to to keep the whole file.]")
+    return text
+
+
 # --- Tool registry: the tools the agent gets; run_agent builds the lookup and
 # schemas.
-# Ep 4 extends this with the planning tool in agent.py (TOOLS + [write_plan]);
-# these six are the carried-forward base.
-TOOLS = [bash, list_files, read, write, edit, grep]
+TOOLS = [bash, list_files, read, write, edit, grep, web_search, fetch_url]

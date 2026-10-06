@@ -65,9 +65,10 @@ to it (`tools.py`, `skills.py`), so `agent.py` stays focused on the loop.
   the scripted episode tasks.
 - **The system prompt is one shared artifact.** Every episode's `system_prompt.md`
   carries the same core text; later episodes add only the section for the mechanism
-  they introduce, and `eval/system_prompt.md` matches `05-skills` exactly. Never edit
-  one copy alone: change all of them together (a drift test in `eval/tests/` fails
-  otherwise).
+  they introduce. Never edit one copy alone: change all of them together. (`eval/`
+  was built on the earlier `05-skills` and is being redesigned with the benchmark
+  episodes; until then its prompt drift test and its imports of 05's old modules
+  fail.)
 
 ## Verify your work
 

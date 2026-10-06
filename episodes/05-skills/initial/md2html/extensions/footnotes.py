@@ -18,7 +18,7 @@ from __future__ import annotations
 import re
 
 from ..lexer import Token
-from ..parser import ASTNode
+from ..parser import Node
 
 TK_FOOTNOTE_DEF = "footnote_def"
 
@@ -77,9 +77,9 @@ class FootnotesExtension:
             return 0
         # Flush the running text buffer before emitting our node.
         if buf:
-            out.append(ASTNode("text", value="".join(buf)))
+            out.append(Node("text", value="".join(buf)))
             buf.clear()
-        out.append(ASTNode("footnote_ref", attrs={"key": key}))
+        out.append(Node("footnote_ref", attrs={"key": key}))
         return m.end() - i
 
     def parse_block(self, parser, tok):
@@ -88,14 +88,14 @@ class FootnotesExtension:
         parser.advance()
         # Inline-parse the body so links/emphasis inside footnote text work.
         children = parser._parse_inline(tok.value)
-        return ASTNode("footnote_def", children=children, attrs={"key": tok.attrs["key"]})
+        return Node("footnote_def", children=children, attrs={"key": tok.attrs["key"]})
 
     def post_parse(self, root, parser):
         """Pull all footnote_def nodes out of the tree and stash them on the
         root for the renderer to emit at the end.
         """
-        defs: dict[str, ASTNode] = {}
-        new_children: list[ASTNode] = []
+        defs: dict[str, Node] = {}
+        new_children: list[Node] = []
         for child in root.children:
             self._extract_defs(child, defs)
             if child.kind == "footnote_def":
@@ -111,7 +111,7 @@ class FootnotesExtension:
         """
         if not node.children:
             return
-        kept: list[ASTNode] = []
+        kept: list[Node] = []
         for c in node.children:
             if c.kind == "footnote_def":
                 defs.setdefault(c.attrs["key"], c)

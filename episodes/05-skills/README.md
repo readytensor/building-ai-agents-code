@@ -1,53 +1,51 @@
-# Episode 5: Skills
+# Skills
 
-**Concept:** let the agent reach beyond its fixed toolkit by *discovering and loading
-skills on demand*, instead of carrying every possible tool in the system prompt on
-every call.
+**Concept:** instructions the agent loads when it needs them, instead of carrying
+every procedure in its system prompt on every call.
 
-**This episode's additions on top of Ep 4:**
-- `list_skills()`: returns the name + one-line description of each available skill
-  (cheap; always present).
-- `load_skill(name)`: parses `.skills/<name>/SKILL.md`, appends its body to the
-  dynamic system-prompt block, and registers any tools the skill provides.
-- A `.skills/<name>/SKILL.md` file format (YAML frontmatter + markdown body).
-- A skill-provided tools registry, so a skill's tools only enter the agent's toolkit
-  once that skill is loaded.
-- Extends Ep 4's dynamic system-prompt mechanism to also carry loaded-skill bodies.
+**Additions on top of Tools:** `skills.py` and a `.skills/` library. A skill is a
+folder with a `SKILL.md`: a name, a one-line description of when it applies, and a
+body of instructions. Every skill's name and description go into the system prompt
+at startup, so the model knows what it can load; `load_skill(name)` returns the body
+as a tool result, and only then is it in context. An unused skill costs one line.
+The loop itself is unchanged from Tools.
 
-Completion is unchanged from earlier episodes: the **natural stop** (the loop ends
-when the model stops calling tools). Rigorous, test-based completion is available as
-the `verification` skill (run the tests before finishing); there is no separate "done"
-tool.
+The library holds three general skills, written for any codebase (the same agent
+later runs on SWE-bench): `implementing-a-feature`, `verification`, `fixing-a-bug`.
+On this episode's task the first two load, at the start and before the finish; the
+third stays unloaded.
 
-**Code** (structured like Ep 4: the loop, the tools, and each mechanism in its own
-file):
-- `agent.py`: the agent loop; differs from Ep 4 only where the skills system plugs in
-  (the skills import, merging skill-provided tools into the toolset each iteration,
-  and extending the dynamic system prompt with loaded-skill bodies)
-- `skills.py` (**this episode's addition**): `list_skills`, `load_skill`, the
-  `SKILL.md` parser, loaded-skill state, the skill-provided tools (`web_search`,
-  `fetch_url`, `lint`, `coverage`), and the system-prompt injection
-- `tools.py`, `compaction.py`, `planning.py`: carried forward from Ep 4 unchanged
-- `.skills/`: the skill library, at the episode root alongside the agent's code (it is
-  agent infrastructure, not part of the toy codebase, so it lives next to
-  `agent.py`/`skills.py`, not inside `initial/` or the sandbox):
-  - `research/SKILL.md`: web research (`web_search` + `fetch_url`)
-  - `verification/SKILL.md`: verify-before-finishing discipline (runs the tests /
-    lint + coverage)
-- `initial/`: `md2html` (the toy codebase) with a test fixture for GitHub-flavored
-  alerts; the fixture fails until the feature is implemented
+**The task:** GitHub-flavored alerts (`> [!NOTE]` and the other four types) as a new
+md2html extension. The fixture pair `initial/tests/fixtures/github_alerts.md` /
+`github_alerts.html` shows the expected output and fails until the feature exists.
+
+**Code:**
+- `skills.py` (**this episode's addition**): `skills_index`, `load_skill`, and the
+  `SKILL.md` parser
+- `.skills/`: the skill library, next to the agent's code (it is agent
+  infrastructure, not part of the project the agent works on, so it is outside
+  `initial/` and the sandbox; `load_skill` is the only way to it)
+- `agent.py`: the loop, unchanged except that the system prompt ends with the skills
+  index and `load_skill` is one more tool
+- `system_prompt.md`: the shared core plus a Skills section that names the moments
+  to load a skill
+- `tools.py`: carried forward from Tools unchanged
+- `grade.py` and `held_out/`: tests the agent never sees, run against the sandbox
+  after a run (`python grade.py` from this folder)
+- `initial/`: `md2html` with its README and the alerts fixture pair
 - `sandbox/`: gitignored, recreated on every run
 
-**Run:**
+**Run** (from the repo root):
 
 ```bash
-python agent.py
+python run.py --cwd episodes/05-skills
 ```
 
-The agent's task: add GitHub-flavored alerts (`> [!NOTE]`, `> [!WARNING]`, etc.) to
-`md2html`. The task points the agent at GitHub's own docs for the spec, which is what
-gives it a reason to discover and load the `research` skill. See
-`initial/tests/fixtures/github_alerts.md` and `.html` for the spec by example.
+Then try the new feature on a real document:
+
+```bash
+python render.py --cwd episodes/05-skills examples/alerts.md --open
+```
 
 **Full context:**
 - `../../README.md`: companion code repo overview

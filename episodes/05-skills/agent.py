@@ -1,33 +1,13 @@
 """
-Episode 5 — Skills
+Skills
 
-Adds a skills system to Ep 4's agent: lazy-loadable bundles of procedural
-knowledge + tools, modeled on Claude Code's skill abstraction (a SKILL.md
-per directory with YAML frontmatter + a body of procedural instructions).
-
-What Ep 5 adds (all in skills.py):
-  - list_skills() — discover what skills exist (name + description).
-  - load_skill(name) — load a skill's body into the system prompt and
-    register the tools it provides for the rest of the run.
-  - skill-provided tools that only appear once their skill loads:
-    web_search + fetch_url (research), lint + coverage (verification).
-
-The system-prompt injection reuses Ep 4's dynamic-system-prompt mechanism:
-each turn the loop rebuilds the view's system message as base + plan +
-loaded-skill bodies (see skills.system_with_skills wrapped around
-planning.system_with_plan). Because skills live in agent state, not message
-history, they survive compaction and keep the message prefix stable.
-
-Everything else is inherited: the action space (tools.py), rolling-summary
-compaction (compaction.py — non-destructive: the history is append-only and
-what the model sees is rebuilt from it each turn by build_view, with the run
-appended to messages.jsonl as it goes), the plan (planning.py), the sandbox reset,
-and the natural stop — the loop ends when the model emits no tool calls.
-(No self-assessed done tool; rigorous, externally-verified completion is the
-job of the `verification` skill, which runs the tests before the agent stops.)
-
-This file is just the agent loop. It owns the LLM client and passes it into
-compact(); imports are one-way (agent → tools / compaction / planning / skills).
+Adds skills to the Tools agent: instructions the agent loads when it needs
+them, instead of carrying every procedure in its system prompt on every call.
+A skill is a SKILL.md with a name, a description and a body (skills.py). Every
+skill's name and description go into the system prompt once, at startup; the
+body arrives only when the agent calls load_skill, as a tool result. The loop
+is the Tools loop unchanged: skills show up as one more tool and a longer
+system prompt.
 
 See ../../README.md for context.
 """
@@ -39,43 +19,19 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from openai import OpenAI
+from tiktoken import get_encoding
 
-# Load .env at import — before the local imports below, because compaction.py
-# reads its knobs (threshold, keep) from the environment at import time. This
-# is the one side effect that can't wait for main().
-load_dotenv(Path("../../.env"))
-
-# Module ref so the loop can read skills.LOADED_TOOLS each turn.
-import skills  # noqa: E402
 # Aliased: run_agent's `tools` parameter takes the canonical name; the loop sets
 # tools_module.CURRENT_ROUND each turn.
-import tools as tools_module  # noqa: E402
-from tools import SANDBOX, TOOLS as FILE_TOOLS, write_tool_telemetry  # noqa: E402
-from compaction import (  # noqa: E402
-    COMPACTION_THRESHOLD, KEEP_LAST_ITERATIONS, build_view, compact, _count_tokens)
-from planning import write_plan, system_with_plan  # noqa: E402
-from skills import list_skills, load_skill, system_with_skills  # noqa: E402
+import tools as tools_module
+from skills import load_skill, skills_index
+from tools import SANDBOX, TOOLS, write_tool_telemetry
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 # The agent's working directory: a fresh copy of initial/, reset by main().
 # SANDBOX itself is defined in tools.py — the tools are bound to it.
 INITIAL = Path("initial")
-
-# The canonical transcript, written as the run goes rather than at the end — so
-# a run that crashes mid-task still leaves everything up to that point on disk.
-# It holds two kinds of entry: every message exactly as it happened, and one
-# record per compaction. Both views are recoverable from the one file — what
-# happened is the messages in order; what the model saw at any point is the
-# messages with each fold applied.
-MESSAGE_LOG = Path("messages.jsonl")
-
-
-def log_entry(entry: dict):
-    """Append one entry to MESSAGE_LOG. Opened and closed per write, so the line
-    is on disk before the next thing happens."""
-    with open(MESSAGE_LOG, "a", encoding="utf-8") as f:
-        f.write(json.dumps(entry) + "\n")
 
 
 def make_client(base_url: str) -> OpenAI:
@@ -99,154 +55,109 @@ def make_client(base_url: str) -> OpenAI:
     return OpenAI(api_key=os.environ.get(key_var), base_url=base_url or None)
 
 
-# --- Loop safety cap to prevent an infinite loop. (Compaction knobs live in
-# compaction.py.)
-MAX_ITERATIONS = int(os.environ.get("MAX_ITERATIONS", 200))
-
-# --- Tool registry. These are the always-available BASE tools: Ep 4's seven
-# (six file primitives + write_plan) plus Ep 5's two skill tools (list_skills,
-# load_skill). main() passes this list into run_agent. Skill-provided tools
-# (web_search, lint, …) are NOT here — load_skill adds them to
-# skills.LOADED_TOOLS, and the loop merges that in each turn, so a tool the
-# agent unlocks mid-run becomes callable.
-TOOLS = FILE_TOOLS + [write_plan, list_skills, load_skill]
-
-
 # The system prompt lives in system_prompt.md next to this file: prompt text is
-# configuration, not loop logic. Its core is shared verbatim by every episode;
-# this episode's copy adds the Skills section (the mechanism built here).
+# configuration, not loop logic. Its core is shared verbatim by every episode.
 SYSTEM = (Path(__file__).parent / "system_prompt.md").read_text(encoding="utf-8")
+# The skills index closes the prompt: one line per skill, so the model knows what
+# it can load without any skill's body in context yet.
+SYSTEM += "\n## Available skills\n\n" + skills_index() + "\n"
+# The task: a real feature for md2html. The fixture pair in initial/tests/fixtures/
+# (github_alerts.md, github_alerts.html) shows the expected output and fails until
+# the feature exists.
+TASK = """Our users write GitHub-flavored alerts in their documents, and md2html
+renders them as ordinary blockquotes. Add an alerts extension to md2html:
 
-TASK = """I want to add support for GitHub-flavored alerts to md2html.
-They look like this:
+- A blockquote whose first line is exactly [!NOTE], [!TIP], [!IMPORTANT],
+  [!WARNING] or [!CAUTION] becomes an alert: a div with the classes
+  markdown-alert and markdown-alert-<type>, a title paragraph naming the type,
+  then the rest of the blockquote as its content, rendered as usual.
+- The marker is the whole first line. A blockquote with anything else on its
+  first line, or with an unknown type such as [!DANGER], stays an ordinary
+  blockquote.
+- Implement it as a new extension under md2html/extensions/, registered like
+  the existing ones.
 
-    > [!NOTE]
-    > Useful information that users should know.
-
-    > [!WARNING]
-    > Urgent info that needs immediate attention.
-
-**IMPORTANT — read carefully:**
-The test fixture at tests/fixtures/github_alerts.html may be WRONG —
-I wrote it from memory and I'm not confident about the exact class
-names. GitHub's actual docs are the ground truth, NOT the fixture.
-
-You MUST use web_search to look up GitHub's latest docs FIRST to
-confirm the exact class names and HTML structure. If your
-implementation matches the fixture but doesn't match what GitHub
-actually emits, the work is incorrect even if pytest passes. If the
-docs contradict the fixture, fix the fixture to match the docs.
-
-THEN implement the extension as a new file under md2html/extensions/.
-Keep your diff minimal — don't refactor unrelated parts of the
-codebase. All existing tests must still pass."""
+I've added a fixture pair at tests/fixtures/github_alerts.md and
+tests/fixtures/github_alerts.html showing the expected output; it currently
+fails. Make it pass, add your own tests, and make sure the existing tests
+still pass too."""
 
 # --- Usage telemetry: token counts per run, recorded by run_agent as it goes.
 # The agent only RECORDS (to metrics.json); the harness (run.py) RENDERS the
-# summary. Compaction tokens, the write_plan count, and the skill-use counts
-# are all recorded separately so the harness can show each section.
-# (Tool-call telemetry lives in tools.py.)
+# summary. (Tool-call telemetry lives in tools.py, next to the decorator that
+# records it.)
 USAGE = {
     "iterations": 0,
     "input_tokens": 0,
     "output_tokens": 0,
-    "compactions": 0,
-    "compact_in": 0,
-    "compact_out": 0,
-    "reasoning": {"write_plan": 0},
-    "skills": {
-        "list_skills": 0,
-        "load_skill": 0,
-        "loaded": [],   # names of skills that actually loaded this run
-    },
-    # {model_in, model_out, tools, tools_out, middle, compacted} per round
-    "per_iter": [],
+    "per_iter": [],  # {model_in, model_out, tools, tools_out} per round
 }
 
 
-def write_metrics(model: str, summarizer_model: str, system: str, task: str):
+def write_metrics(model: str, system: str, task: str):
     """Write this run's token usage to metrics.json. Recording only — the
     harness (run.py) reads this and renders the summary."""
     metrics = {
         "agents": [{"label": "agent", **USAGE}],
         "inputs": {"system": system, "task": task},
-        "config": {
-            "MODEL": model,
-            "SUMMARIZER_MODEL": summarizer_model,
-            "COMPACTION_THRESHOLD": COMPACTION_THRESHOLD,
-            "KEEP_LAST_ITERATIONS": KEEP_LAST_ITERATIONS,
-            "MAX_ITERATIONS": MAX_ITERATIONS,
-        },
+        "config": {"MODEL": model},
     }
     with open("metrics.json", "w", encoding="utf-8") as f:
         json.dump(metrics, f, indent=2)
 
 
+# tiktoken encoder for the per-round tool-result token count (tools_out). Most of
+# the context growth is tool results (a file read dwarfs the model's request), so
+# we measure their real token size. cl100k_base is OpenAI's tokenizer; on Claude
+# it's a close approximation — fine for a telemetry count.
+_TOKENIZER = get_encoding("cl100k_base")
+
+
+def _count_tokens(messages):
+    """Real token count (tiktoken) of these messages' content — used to record
+    each round's tool-result total (tools_out)."""
+    text = "\n".join(str(m.get("content") or "") for m in messages)
+    return len(_TOKENIZER.encode(text))
+
+
 # --- The agent loop, as a function. The signature is the anatomy of an agent:
-# a model, a system prompt, tools, and a task — plus Ep 3's summarizer. `tools`
-# here means the BASE tools: skills register more mid-run, and the loop merges
-# skills.LOADED_TOOLS in each turn.
-def run_agent(client, model: str, system: str, tools: list,
-              summarizer_client, summarizer_model: str, task: str):
-    """Run the agent loop on `task` until the model stops requesting tool calls
-    (the natural stop); return its final message. Returns None if the loop hits
-    MAX_ITERATIONS first. Records token usage into USAGE along the way (tool
-    calls record themselves in tools.py)."""
-    base_tools_by_name = {t.__name__: t for t in tools}
-    # The canonical history: append-only. Nothing is ever removed from it or
-    # rewritten in it — compaction records a fold instead (see below), and what
-    # the model sees is derived from the two.
-    history = []
-    folds = []
-    MESSAGE_LOG.unlink(missing_ok=True)
-
-    def record(message):
-        """Add a message to the canonical history, and to the on-disk log."""
-        history.append(message)
-        log_entry({"kind": "message", **message})
-
-    record({"role": "system", "content": system})
-    record({"role": "user", "content": task})
+# a model, a system prompt, tools, and a task — give it those, get the final
+# answer. The same as before except `tools` is now a list of @tool-decorated
+# functions (schemas AND dispatch derive from it) instead of one hardwired tool.
+def run_agent(client, model: str, system: str, tools: list, task: str) -> str:
+    """Run the agent loop on `task` until the model stops requesting tool
+    calls; return its final message. Records token usage into USAGE along the
+    way (tool calls record themselves in tools.py)."""
+    tools_by_name = {t.__name__: t for t in tools}
+    tool_defs = [t.tool_definition for t in tools]
+    messages = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": task},
+    ]
     iteration = 0
 
-    while iteration < MAX_ITERATIONS:
+    while True:
         iteration += 1
-        # Tag tool calls with the round they happen in.
+        # tag tool calls with the round they happen in
         tools_module.CURRENT_ROUND = iteration
-
-        # What the model sees this turn, derived rather than stored: the history
-        # projected through its folds, then the system prompt rebuilt from the
-        # stable base plus the current plan plus any loaded-skill bodies. All of
-        # these live in agent state (not message history), so they are re-injected
-        # fresh each turn without ever entering the transcript — and because the
-        # view is a fresh list, writing to it can't disturb the record underneath.
-        view = build_view(history, folds)
-        view[0] = {"role": "system",
-                   "content": system_with_skills(system_with_plan(system))}
-
-        # The toolset grows as skills load, so rebuild it each turn: the base
-        # tools passed in, plus any tools unlocked by skills loaded so far.
-        tools_by_name = {**base_tools_by_name, **skills.LOADED_TOOLS}
-        tool_defs = [fn.tool_definition for fn in tools_by_name.values()]
-
         resp = client.chat.completions.create(
-            model=model, messages=view, tools=tool_defs,
+            model=model, messages=messages, tools=tool_defs,
         )
-        u = resp.usage
+        usage = resp.usage
         USAGE["iterations"] = iteration
-        USAGE["input_tokens"] += u.prompt_tokens
-        USAGE["output_tokens"] += u.completion_tokens
-        USAGE["per_iter"].append({"model_in": u.prompt_tokens,
-                                  "model_out": u.completion_tokens, "tools": 0,
-                                  "tools_out": 0, "middle": 0, "compacted": False})
+        USAGE["input_tokens"] += usage.prompt_tokens
+        USAGE["output_tokens"] += usage.completion_tokens
+        USAGE["per_iter"].append({
+            "model_in": usage.prompt_tokens, "model_out": usage.completion_tokens,
+            "tools": 0, "tools_out": 0,
+        })
 
         msg = resp.choices[0].message
-        # Tool calls requested this round.
+        # tool calls requested this round
         USAGE["per_iter"][-1]["tools"] = len(msg.tool_calls or [])
-        record(msg.model_dump(exclude_none=True))
+        messages.append(msg.model_dump(exclude_none=True))
 
         if not msg.tool_calls:
-            # Natural stop: no tool calls means the model considers the task done.
             return msg.content or ""
 
         round_tool_msgs = []
@@ -263,79 +174,30 @@ def run_agent(client, model: str, system: str, tools: list,
                 arg_preview = ", ".join(parts)
                 print(f"> {tc.function.name}({arg_preview})")
                 result = fn(**args)
-                if tc.function.name == "write_plan":
-                    USAGE["reasoning"]["write_plan"] += 1
-                elif tc.function.name == "list_skills":
-                    USAGE["skills"]["list_skills"] += 1
-                elif tc.function.name == "load_skill":
-                    USAGE["skills"]["load_skill"] += 1
-                    # Record which skill actually loaded (the name is in the args).
-                    sname = args.get("name")
-                    if (sname and sname in skills.LOADED_SKILLS
-                            and sname not in USAGE["skills"]["loaded"]):
-                        USAGE["skills"]["loaded"].append(sname)
             except (TypeError, KeyError, json.JSONDecodeError, ValueError) as e:
-                # Bad tool call (missing args, unknown tool, etc.) — feed the
-                # error back to the model so it can self-correct rather than
-                # crashing.
-                result = (f"Error executing {tc.function.name}: "
-                          f"{type(e).__name__}: {e}")
+                # Tool errors come back to the model as the tool result, not as an
+                # agent crash. The model can self-correct on the next iteration.
+                result = (
+                    f"Error executing {tc.function.name}: {type(e).__name__}: {e}"
+                )
                 print(f"  ! {result}")
-            preview = (result if len(result) < 5000
-                       else result[:5000] + "...[truncated]")
+            if len(result) < 5000:
+                preview = result
+            else:
+                preview = result[:5000] + "...[truncated]"
             print(f"  {preview}\n")
             tool_msg = {"role": "tool", "tool_call_id": tc.id, "content": result}
             round_tool_msgs.append(tool_msg)
-            record(tool_msg)
+            messages.append(tool_msg)
 
-        # Tool results are most of the context growth: the model only *requests* a
-        # tool (small `out`), but the result it hands back can be huge (a file read).
-        # Record this round's tool-result tokens so the per-iter numbers actually
-        # add up.
+        # Tool results are most of the context growth (a file read dwarfs the
+        # model's request); record this round's tool-result tokens so the
+        # per-iter numbers add up.
         USAGE["per_iter"][-1]["tools_out"] = _count_tokens(round_tool_msgs)
 
-        # Compaction: compact() summarizes the older middle once the MIDDLE's own
-        # token count crosses the threshold, and no-ops otherwise — so it's safe to
-        # call every turn; it only summarizes when there's enough stale middle to be
-        # worth it (and with KEEP small, the fire drops the input hard). It reads
-        # the current view and returns a summary; it never rewrites the history.
-        view = build_view(history, folds)
-        summary_msg, tail_len, ci, co, middle_tok = compact(
-            view, summarizer_client, summarizer_model)
-        # Compactable-middle size this turn (the sawtooth metric).
-        USAGE["per_iter"][-1]["middle"] = middle_tok
-        # Counted even when the summary was rejected — a guard-skipped attempt
-        # still spent these tokens.
-        USAGE["compact_in"] += ci
-        USAGE["compact_out"] += co
-        if summary_msg:
-            # The fold: from here on, this summary stands in for everything
-            # between the head and the preserved tail. Recording where the tail
-            # starts is enough to locate it, because the tail is always the
-            # newest messages and history only ever grows.
-            fold = {
-                "kind": "compaction",
-                "tail_start": len(history) - tail_len,
-                "summary": summary_msg,
-            }
-            folds.append(fold)
-            log_entry(fold)
-            USAGE["compactions"] += 1
-            # The middle crossed the threshold this iteration.
-            USAGE["per_iter"][-1]["compacted"] = True
-            print(f"  [COMPACTION FIRED — {len(view)} messages → "
-                  f"{len(build_view(history, folds))}, "
-                  f"history still {len(history)}, summarizer in={ci} out={co}]\n")
-        elif ci:
-            # The guard in compact() rejected a truncated/empty summary reply.
-            print(f"  [COMPACTION SKIPPED — summary reply hit its token cap; keeping "
-                  f"full history this round (summarizer in={ci} out={co})]\n")
 
-    return None   # iteration cap reached without a natural stop
-
-
-# --- Setup and run. Everything with side effects lives here (except the .env
-# load above), so importing this module to reuse run_agent touches nothing.
+# --- Setup and run. Everything with side effects lives here, so importing
+# this module (to reuse run_agent or the tools) touches nothing.
 def main():
     # Sandbox reset: every run starts from a clean copy of initial/.
     if SANDBOX.exists():
@@ -344,29 +206,17 @@ def main():
 
     # LLM client. Which provider/model to use is runtime config, read from
     # .env; make_client (defined above) does the connecting.
+    load_dotenv(Path("../../.env"))
     base_url = os.environ.get("LLM_BASE_URL") or ""
     model = os.environ.get("LLM_AGENT_MODEL", "deepseek/deepseek-v4-flash")
     client = make_client(base_url)
 
-    # Compaction summarizes on its own model — and, if pointed at a different
-    # provider, its own endpoint. Both default to the agent's, so leaving the
-    # LLM_SUMMARIZER_* vars unset simply reuses the agent's client.
-    summarizer_base_url = os.environ.get("LLM_SUMMARIZER_BASE_URL") or base_url
-    summarizer_model = os.environ.get("LLM_SUMMARIZER_MODEL") or model
-    summarizer_client = (
-        client if summarizer_base_url == base_url
-        else make_client(summarizer_base_url)
-    )
-
     print(f"USER: {TASK}\n")
-    final = run_agent(client, model, SYSTEM, TOOLS,
-                      summarizer_client, summarizer_model, TASK)
-    if final is None:
-        print(f"\n=== MAX_ITERATIONS REACHED ({MAX_ITERATIONS}) — aborting ===")
-    else:
-        print(f"\n=== FINAL RESPONSE ===\n\n{final}")
+    # The tools: the Tools episode's, plus load_skill.
+    final = run_agent(client, model, SYSTEM, TOOLS + [load_skill], TASK)
+    print(f"\n=== FINAL RESPONSE ===\n\n{final}")
     write_tool_telemetry()
-    write_metrics(model, summarizer_model, SYSTEM, TASK)
+    write_metrics(model, SYSTEM, TASK)
 
 
 if __name__ == "__main__":

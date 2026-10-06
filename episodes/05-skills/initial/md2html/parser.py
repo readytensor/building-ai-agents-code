@@ -40,7 +40,7 @@ from .lexer import (
 
 
 @dataclass
-class ASTNode:
+class Node:
     """An AST node.
 
     `kind` is the discriminator the renderer dispatches on (e.g. "heading",
@@ -50,7 +50,7 @@ class ASTNode:
     """
 
     kind: str
-    children: list["ASTNode"] = field(default_factory=list)
+    children: list["Node"] = field(default_factory=list)
     value: str = ""
     attrs: dict[str, Any] = field(default_factory=dict)
 
@@ -81,8 +81,8 @@ class Parser:
 
     # -- public API ---------------------------------------------------------
 
-    def parse(self) -> ASTNode:
-        root = ASTNode("document")
+    def parse(self) -> Node:
+        root = Node("document")
         while not self.eof():
             node = self._parse_block()
             if node is not None:
@@ -96,7 +96,7 @@ class Parser:
 
     # -- block dispatch -----------------------------------------------------
 
-    def _parse_block(self) -> ASTNode | None:
+    def _parse_block(self) -> Node | None:
         tok = self.current()
         assert tok is not None
 
@@ -115,7 +115,7 @@ class Parser:
 
         if tok.kind == TK_HEADING:
             self.advance()
-            return ASTNode(
+            return Node(
                 "heading",
                 children=self._parse_inline(tok.value),
                 attrs={"level": tok.attrs["level"]},
@@ -123,15 +123,15 @@ class Parser:
 
         if tok.kind == TK_PARAGRAPH:
             self.advance()
-            return ASTNode("paragraph", children=self._parse_inline(tok.value))
+            return Node("paragraph", children=self._parse_inline(tok.value))
 
         if tok.kind == TK_HR:
             self.advance()
-            return ASTNode("hr")
+            return Node("hr")
 
         if tok.kind == TK_CODE_BLOCK:
             self.advance()
-            return ASTNode(
+            return Node(
                 "code_block",
                 value=tok.value,
                 attrs={"lang": tok.attrs.get("lang", ""), "info": tok.attrs.get("info", "")},
@@ -155,14 +155,14 @@ class Parser:
 
     # -- list parsing -------------------------------------------------------
 
-    def _parse_list(self) -> ASTNode:
+    def _parse_list(self) -> Node:
         first = self.current()
         assert first is not None and first.kind == TK_LIST_ITEM
         ordered = first.attrs["ordered"]
         base_indent = first.attrs["indent"]
         start = first.attrs.get("start")
 
-        list_node = ASTNode(
+        list_node = Node(
             "list",
             attrs={"ordered": ordered, "start": start if ordered and start != 1 else None},
         )
@@ -204,7 +204,7 @@ class Parser:
                     # No item yet to nest under; treat as sibling.
                     self.advance()
                     list_node.children.append(
-                        ASTNode("list_item", children=self._parse_item_body(tok))
+                        Node("list_item", children=self._parse_item_body(tok))
                     )
                 else:
                     sublist = self._parse_list()
@@ -212,12 +212,12 @@ class Parser:
                 continue
 
             self.advance()
-            item_node = ASTNode("list_item", children=self._parse_item_body(tok))
+            item_node = Node("list_item", children=self._parse_item_body(tok))
             list_node.children.append(item_node)
 
         return list_node
 
-    def _parse_item_body(self, tok: Token) -> list[ASTNode]:
+    def _parse_item_body(self, tok: Token) -> list[Node]:
         """Parse a single list item's body: the marker-line text plus any
         continuation lines, possibly containing nested lists or blocks.
 
@@ -250,16 +250,16 @@ class Parser:
 
     _INLINE_CHARS = set("*_`[!\\\n")
 
-    def _parse_inline(self, text: str) -> list[ASTNode]:
+    def _parse_inline(self, text: str) -> list[Node]:
         """Walk `text` once and emit a flat list of inline nodes."""
-        out: list[ASTNode] = []
+        out: list[Node] = []
         i = 0
         n = len(text)
         buf: list[str] = []
 
         def flush() -> None:
             if buf:
-                out.append(ASTNode("text", value="".join(buf)))
+                out.append(Node("text", value="".join(buf)))
                 buf.clear()
 
         while i < n:
@@ -284,7 +284,7 @@ class Parser:
                     buf.pop()
                     buf.pop()
                     flush()
-                    out.append(ASTNode("linebreak"))
+                    out.append(Node("linebreak"))
                 else:
                     # Soft break -> single space.
                     buf.append(" ")
@@ -298,7 +298,7 @@ class Parser:
                 end, code = self._match_code_span(text, i)
                 if end > 0:
                     flush()
-                    out.append(ASTNode("code", value=code))
+                    out.append(Node("code", value=code))
                     i = end
                     continue
 
@@ -306,7 +306,7 @@ class Parser:
                 end, alt, url, title = self._match_link(text, i + 1)
                 if end > 0:
                     flush()
-                    img = ASTNode("image", value=alt, attrs={"src": url, "title": title})
+                    img = Node("image", value=alt, attrs={"src": url, "title": title})
                     out.append(img)
                     i = end
                     continue
@@ -315,7 +315,7 @@ class Parser:
                 end, label, url, title = self._match_link(text, i)
                 if end > 0:
                     flush()
-                    link = ASTNode(
+                    link = Node(
                         "link",
                         children=self._parse_inline(label),
                         attrs={"href": url, "title": title},
@@ -328,7 +328,7 @@ class Parser:
                 end, kind, inner = self._match_emphasis(text, i)
                 if end > 0:
                     flush()
-                    out.append(ASTNode(kind, children=self._parse_inline(inner)))
+                    out.append(Node(kind, children=self._parse_inline(inner)))
                     i = end
                     continue
 
@@ -339,7 +339,7 @@ class Parser:
         return out
 
     def _try_inline_extensions(
-        self, text: str, i: int, out: list[ASTNode], buf: list[str]
+        self, text: str, i: int, out: list[Node], buf: list[str]
     ) -> int:
         """Give extensions first crack at inline parsing. Returns the number
         of input characters consumed, or 0 if no extension claimed it.

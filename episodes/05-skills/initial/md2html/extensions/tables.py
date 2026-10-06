@@ -23,7 +23,7 @@ from __future__ import annotations
 import re
 
 from ..lexer import Token
-from ..parser import ASTNode
+from ..parser import Node
 
 TK_TABLE = "table"
 
@@ -160,24 +160,24 @@ class TablesExtension:
         align = tok.attrs["align"]
 
         header_nodes = [
-            ASTNode("table_cell", children=parser._parse_inline(c), attrs={"header": True, "align": a})
+            Node("table_cell", children=parser._parse_inline(c), attrs={"header": True, "align": a})
             for c, a in zip(header, align)
         ]
         row_nodes = []
         for row in rows:
             cells = [
-                ASTNode(
+                Node(
                     "table_cell",
                     children=parser._parse_inline(c),
                     attrs={"header": False, "align": a},
                 )
                 for c, a in zip(row, align)
             ]
-            row_nodes.append(ASTNode("table_row", children=cells))
+            row_nodes.append(Node("table_row", children=cells))
 
-        return ASTNode(
+        return Node(
             "table",
-            children=[ASTNode("table_header", children=header_nodes)] + row_nodes,
+            children=[Node("table_header", children=header_nodes)] + row_nodes,
             attrs={"align": align},
         )
 

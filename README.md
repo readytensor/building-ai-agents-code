@@ -29,7 +29,7 @@ The videos are numbered straight through, in three parts.
 | 02  | Getting started    | Project Setup   | How do I run it?                              | Nothing yet: the repository, and how to run the code                                  |
 | 03  | Building the agent | The Loop        | What is an agent?                             | A `while` loop and one `bash` tool                                                    |
 | 04  | Building the agent | Tools           | How does it actually do things?               | General tools for files (`read`, `write`, `edit`, `grep`, `list_files`) and the web (`web_search`, `fetch_url`), and a small `@tool` helper |
-| 05  | Building the agent | Skills          | How does it reach beyond its fixed toolkit?   | Capabilities loaded only when needed (`list_skills`, `load_skill`, `SKILL.md`)       |
+| 05  | Building the agent | Skills          | How does it reach beyond its fixed toolkit?   | Instructions loaded only when needed (`SKILL.md`, `load_skill`)                      |
 | 06  | Building the agent | Subagents       | When is one agent not enough?                 | `delegate`, worker configs, and parallel workers, each with its own context           |
 | 07  | Building the agent | Verification    | How do we know the work is finished and good? | A completion gate at the stop, and grading outside the loop                           |
 | 08+ | The benchmark      | Setup, then results | Does it hold up on real code?             | The same agent on SWE-bench Verified (`eval/`)                                        |
@@ -96,7 +96,7 @@ building-ai-agents-code/
 ├── examples/
 │   ├── md2html/             # the FINISHED tool, every feature
 │   ├── about-the-series.md  # a sample that uses every feature
-│   └── toc.md, emoji.md     # one sample per feature the agent builds
+│   └── toc.md, emoji.md, alerts.md  # one sample per feature the agent builds
 ├── eval/                # evaluation: SWE-bench Verified + episode tasks
 ├── run.py               # optional harness that records a run
 ├── render.py            # render Markdown with an episode's md2html

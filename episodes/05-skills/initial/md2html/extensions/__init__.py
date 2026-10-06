@@ -25,7 +25,6 @@ from typing import Protocol
 
 from .code_blocks import CodeBlocksExtension
 from .footnotes import FootnotesExtension
-from .reference_links import ReferenceLinksExtension
 from .tables import TablesExtension
 
 
@@ -37,13 +36,10 @@ class Extension(Protocol):
 
 # Stable order: tables first (block-level token competes with paragraphs),
 # code_blocks second (augments fenced code), footnotes last (post-render
-# section append).  reference_links runs before footnotes so its block
-# tokenizer sees definition lines before the paragraph accumulator does;
-# the inline hook runs before the core '[' handler for the same reason.
+# section append).
 _REGISTRY: dict[str, type] = {
     "tables": TablesExtension,
     "code_blocks": CodeBlocksExtension,
-    "reference_links": ReferenceLinksExtension,
     "footnotes": FootnotesExtension,
 }
 
