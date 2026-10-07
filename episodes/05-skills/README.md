@@ -2,7 +2,7 @@
 
 **Concept:** knowledge the agent loads when it needs it, instead of carrying it in the
 system prompt on every call. A skill holds what the model cannot know on its own:
-the team's rules, how its project is extended, how it finishes work.
+the team's rules and the conventions its project follows.
 
 **Additions on top of Tools:** `skills.py` and a `.skills/` library. A skill is a
 folder with a `SKILL.md`: a name, a one-line description of when it applies, and a
@@ -11,10 +11,12 @@ at startup, so the model knows what it can load; `load_skill(name)` returns the 
 as a tool result, and only then is it in context. An unused skill costs one line.
 The loop itself is unchanged from Tools.
 
-The library holds three skills, each for a reason the model could not supply itself:
-`house-typography` (the team's style guide: rules that differ from common defaults
-and are written nowhere else), `md2html-extensions` (how the project is extended:
-hooks, registry, tests), and `verification` (how the team checks finished work).
+The library holds three skills, and this task needs one of them:
+`house-typography` (the team's style guide for punctuation: rules that differ from
+common defaults), `link-policy` (the team's rules for links: allowed schemes and the
+attributes every link carries) and `markdown-spec` (md2html follows the GitHub
+Flavored Markdown spec: where to read it, and how its examples become tests). The
+other two are for the next tasks; here they cost one index line each.
 
 **The task:** typographic punctuation (curly quotes, en and em dashes, the ellipsis)
 as a new md2html extension, "following the team's style guide". The guide is the

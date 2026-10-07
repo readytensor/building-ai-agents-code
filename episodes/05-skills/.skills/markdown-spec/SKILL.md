@@ -1,6 +1,6 @@
 ---
 name: markdown-spec
-description: Which Markdown spec md2html follows, where to read the current text, and how its examples become tests. Use when a task adds or changes Markdown syntax, a new block or inline element, or a parsing rule.
+description: md2html follows the GitHub Flavored Markdown spec; where to read it, and how its examples become tests. Use when a task implements or changes syntax the spec defines, such as tables, strikethrough, task lists, autolinks or reference links.
 ---
 
 # The Markdown spec
