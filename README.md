@@ -8,6 +8,8 @@ This is the companion code for the **Building AI Agents** video series. Each epi
 adds one idea, in code, on top of the last, and the diff between one episode and the
 next is the lesson.
 
+Watch the videos on Clyep: [Building AI Agents](https://clyep.io/series/building-ai-agents/).
+
 ## Who this is for
 
 Engineers comfortable with Python and calling an LLM API. No prior agent-building
